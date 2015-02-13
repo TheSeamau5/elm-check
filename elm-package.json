@@ -1,0 +1,15 @@
+{
+    "version": "1.0.0",
+    "summary": "Property-based testing in Elm",
+    "repository": "https://github.com/USER/PROJECT.git",
+    "license": "MIT",
+    "source-directories": [
+        "src"
+    ],
+    "exposed-modules": [
+      "Check"
+    ],
+    "dependencies": {
+        "elm-lang/core": "1.1.0 <= v < 2.0.0"
+    }
+}
