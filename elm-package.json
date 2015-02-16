@@ -1,5 +1,5 @@
 {
-    "version": "1.0.0",
+    "version": "1.1.0",
     "summary": "Property-based testing in Elm",
     "repository": "https://github.com/TheSeamau5/elm-check.git",
     "license": "MIT",
@@ -7,7 +7,7 @@
         "src"
     ],
     "exposed-modules": [
-      "Check"
+        "Check"
     ],
     "dependencies": {
         "elm-lang/core": "1.1.0 <= v < 2.0.0"
