@@ -122,8 +122,9 @@ test name predicate (tests, seed) =
 
 {-| Create a property given a number of test cases, a name, a condition to test and a generator
 Example :
+
     doubleNegativeIsPositive =
-      propertyN 10000
+      propertyN 1000
                 "Double Negative is Positive"
                 (\number -> -(-number) == number)
                 (float -300 400)
@@ -177,6 +178,7 @@ property = propertyN 100
 
 {-| Analog of `property` for functions of two arguments
 Example :
+
     property2 "Bad Addition Subtraction Inverse"
               (\a b -> (a - b - 1) == (a + (-b)))
               (float 0 100) (float 0 100)
