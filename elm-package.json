@@ -1,5 +1,5 @@
 {
-    "version": "2.0.0",
+    "version": "2.0.1",
     "summary": "Property-based testing in Elm",
     "repository": "https://github.com/TheSeamau5/elm-check.git",
     "license": "MIT",
