@@ -5,7 +5,7 @@ Property based testing is a way to generate tests for your code and automate the
 
 # How it works
 
-elm-check is very simple. You specify the properties you wish to test and you call `check` on all these properties.
+elm-check is very simple. You specify the properties you wish to test and you call `simpleCheck` on all these properties.
 
 So, what is a property?
 
@@ -16,7 +16,7 @@ For example, a property of square roots is that the square root of a number squa
 In elm-check, you can define this property as follows:
 
 ```elm
-squareRootInverseProperty =
+prop_squareRootInverse =
   property "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
 ```
 
@@ -43,7 +43,7 @@ This is a random generator that will generate a random float between 0 and 100. 
 
 Now that we have our property and understand how it works, how do we check it?
 
-Simple, we use the `check` function.
+Simple, we use the `simpleCheck` function.
 
 `check` takes a list of properties and returns a string output. This output will tell you either that all tests have passed or it will lists the properties that have failed and point to the input that has made the property fail.
 
@@ -57,18 +57,18 @@ import Text (plainText)
 
 
 tests =
-  check [
+  simpleCheck [
     property "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
   ]
 
-main = plainText tests
+main = display tests
 ```
 
 
 We would get :
 
 ```
-Ok, passed all tests.
+Square Root Inverse has passed 100 tests!
 ```
 
 But, if we just modified the function a teeny weeny bit and made it wrong:
@@ -90,8 +90,79 @@ Well, by default, `property` generates 100 test cases. If you need more or fewer
 So, we can rewrite the above property as :
 
 ```elm
-squareRootInverseProperty =
-  propertyN 10000 "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
+prop_squareRootInverse =
+  propertyN 1000 "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
 ```
 
-Now, this will generate 10,000 cases instead of 100.
+Now, this will generate 1,000 cases instead of 100.
+
+# Continuous checking
+
+While, this strategy can find a number of bugs, certain bugs are quite hard to find.
+
+For example, let's consider the following property:
+
+```elm
+prop_discontinuous : Property
+prop_discontinuous =
+  property "discontinuous" (\x -> (x - 1) // (x - 1) == 1) (int 0 10000)
+```
+
+This property tests if a number divided by itself is equal to 1 except that it has a slight twist,
+the property has a discontinuity at `x == 1`. This means that this property should fail if `x` were
+set to `1`.
+
+Except, if we actually tried it, we get the result:
+
+```
+discontinuous has passed 100 tests!
+```
+
+This means that it has passed all the tests. In order to find the bug we would need to run it more than
+100 times. One way is to change from `property` to `propertyN`, but then again, this is hard coding
+the number of attempts elm-check would try.
+
+Another, better, way would be to use `continuousCheck` as follows:
+
+```elm
+import Random (..)
+import Check (..)
+import Signal (..)
+
+
+prop_discontinuous : Property
+prop_discontinuous =
+  property "discontinuous" (\x -> (x - 1) // (x - 1) == 1) (int 0 10000)
+
+test : Signal TestOutput
+test =
+  continuousCheck
+    [ prop_discontinuous
+    ]
+
+
+main =
+  display <~ test
+```
+
+`continuousCheck` re-runs the test every second using the current time as a seed.
+
+So, if we wait enough time, we go from this output:
+
+```
+discontinuous has passed 100 tests!
+```
+
+to this output:
+
+```
+discontinuous has failed with the following input: 1
+```
+
+Which is exactly what we wanted. Now, elm-check has found the bug even though
+it was a pretty precise and edge case bug. The reason elm-check has found it
+is because it ran several times using different seeds. This means that it has
+had a change to try a larger portion of the input space. The longer the test
+runs, the more input it tries. This means that if you run elm-check long enough
+(say, a minute or so), and find no bugs, then you can be quite confident on the
+strength and correctness of the properties you are testing. 
