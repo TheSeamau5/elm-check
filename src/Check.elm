@@ -1,5 +1,7 @@
 module Check
-  ( property
+  ( Property
+  , TestOutput
+  , property
   , property2
   , property3
   , property4
@@ -11,59 +13,170 @@ module Check
   , property4N
   , property5N
   , check
-  , Property) where
+  , simpleCheck
+  , continuousCheck
+  , continuousCheckEvery
+  , deepContinuousCheck
+  , deepContinuousCheckEvery
+  , print
+  , printVerbose
+  , display
+  , displayVerbose ) where
 {-| Library for doing property-based testing in Elm
 
-#Constructing properties
-@docs property, property2, property3, property4, property5, property6, propertyN, property2N, property3N, property4N, property5N
+# Constructing properties
+@docs property, propertyN
 
-#Checking the properties
-@docs check
+# Checking the properties
+@docs check, simpleCheck
+
+# Continuously checking properties
+@docs continuousCheck, deepContinuousCheck, continuousCheckEvery, deepContinuousCheckEvery
+
+# Printing and displaying results
+@docs print, printVerbose, display, displayVerbose
+
+# Properties for functions of multiple parameters
+@docs property2, property3, property4, property5, property6, property2N, property3N, property4N, property5N
+
 -}
 
-import Random (Generator, list, generate, initialSeed, customGenerator)
-import List (map, filter, length)
-import String (join)
+import Random (Generator, list, generate, initialSeed, Seed, customGenerator)
+import List (map, map2, filter, length, head, (::))
 import Result (Result(..))
-
-type alias Property = Result (String, String) ()
-
-generateTestCases : Generator (List a) -> List a
-generateTestCases listGenerator =
-  (fst
-    (generate listGenerator
-      (initialSeed 1)))
+import Time (every, second, Time)
+import Signal
+import String (join)
+import Graphics.Element (Element)
+import Text (leftAligned, monospace, fromString)
 
 
-constructResultPair : (a -> Bool) -> a -> (a, Bool)
-constructResultPair predicate value =
-  (value, predicate value)
+type alias Error =
+  { name : String
+  , value : String
+  , seed : Seed
+  }
+
+type alias Success =
+  { name : String
+  , value : String
+  , seed : Seed
+  }
+
+type alias TestResult = List (Result Error Success)
+
+type alias Property = (Seed) -> TestResult
+
+type alias TestOutput = List TestResult
+
+mergeTestResult : Result Error Success -> Result Error Success -> Result Error Success
+mergeTestResult result1 result2 =
+  case result1 of
+    Err err1 -> Err err1
+    Ok ok1 ->
+      case result2 of
+        Err err2 -> Err err2
+        Ok ok2 -> Ok ok1
+
+mergeTestResults : TestResult -> TestResult -> TestResult
+mergeTestResults results1 results2 =
+  let errorResults =
+        filter
+          (\result ->
+            case result of
+              Ok _ -> False
+              Err _ -> True)
+          results1
+  in
+    case length errorResults of
+      0 ->
+        map2 mergeTestResult results1 results2
+      n ->
+        errorResults
+
+mergeTestOutputs : TestOutput -> TestOutput -> TestOutput
+mergeTestOutputs output1 output2 =
+  case output1 of
+    [] -> output2
+    x :: xs ->
+      case output2 of
+        [] -> output1
+        y :: ys ->
+          mergeTestResults x y :: mergeTestOutputs xs ys
 
 
-filterFailing : List (a, Bool) -> List (a, Bool)
-filterFailing list =
-  filter (\x -> (snd x) == False) list
+generateTestCases : Generator (List a) -> Seed -> (List a, Seed)
+generateTestCases listGenerator seed =
+  generate listGenerator seed
+
+test : String -> (a -> Bool) -> (List a, Seed) -> TestResult
+test name predicate (tests, seed) =
+  let testResults = map (\t -> (t, predicate t)) tests
+      toResult (t, value) =
+        case value of
+          True  -> Ok { name = name, value = toString t, seed = seed }
+          False -> Err { name = name, value = toString t, seed = seed }
+  in
+    map toResult testResults
+
+
+{-| Create a property given a number of test cases, a name, a condition to test and a generator
+Example :
+    doubleNegativeIsPositive =
+      propertyN 10000
+                "Double Negative is Positive"
+                (\number -> -(-number) == number)
+                (float -300 400)
+-}
+propertyN : Int -> String -> (a -> Bool) -> Generator a -> Property
+propertyN numberOfTests name predicate generator =
+  \seed ->
+      let listGenerator = list numberOfTests generator -- listGenerator : Generator (List a)
+          testCases = generateTestCases listGenerator seed -- testCases : (List a, Seed)
+      in
+        test name predicate testCases
+
+
+{-| Analog of `propertyN` for functions of two arguments
+-}
+property2N : Int -> String -> (a -> b -> Bool) -> Generator a -> Generator b -> Property
+property2N numberOfTests name predicate generatorA generatorB =
+  propertyN numberOfTests name (\(a,b) -> predicate a b) (rZip generatorA generatorB)
+
+{-| Analog of `propertyN` for functions of three arguments
+-}
+property3N : Int -> String -> (a -> b -> c -> Bool) -> Generator a -> Generator b -> Generator c -> Property
+property3N numberOfTests name predicate generatorA generatorB generatorC =
+  propertyN numberOfTests name (\(a,b,c) -> predicate a b c) (rZip3 generatorA generatorB generatorC)
+
+{-| Analog of `propertyN` for functions of four arguments
+-}
+property4N : Int -> String -> (a -> b -> c -> d -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Property
+property4N numberOfTests name predicate generatorA generatorB generatorC generatorD =
+  propertyN numberOfTests name (\(a,b,c,d) -> predicate a b c d) (rZip4 generatorA generatorB generatorC generatorD)
+
+{-| Analog of `propertyN` for functions of five arguments
+-}
+property5N : Int -> String -> (a -> b -> c -> d -> e -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Property
+property5N numberOfTests name predicate generatorA generatorB generatorC generatorD generatorE =
+  propertyN numberOfTests name (\(a,b,c,d,e) -> predicate a b c d e) (rZip5 generatorA generatorB generatorC generatorD generatorE)
+
+
 
 {-| Create a property given a name, a condition to test and a generator
-
 Example :
-
     doubleNegativeIsPositive =
       property "Double Negative is Positive"
                (\number -> -(-number) == number)
                (float -300 400)
-
 Note : This property will create 100 test cases. If you want a different
 number, use `propertyN`
 -}
 property : String -> (a -> Bool) -> Generator a -> Property
-property name predicate generator =
-  propertyN 100 name predicate generator
+property = propertyN 100
 
 {-| Analog of `property` for functions of two arguments
-
 Example :
-
     property2 "Bad Addition Subtraction Inverse"
               (\a b -> (a - b - 1) == (a + (-b)))
               (float 0 100) (float 0 100)
@@ -96,90 +209,125 @@ property6 : String -> (a -> b -> c -> d -> e -> f -> Bool) -> Generator a -> Gen
 property6 name predicate generatorA generatorB generatorC generatorD generatorE generatorF =
   property name (\(a,b,c,d,e,f) -> predicate a b c d e f) (rZip6 generatorA generatorB generatorC generatorD generatorE generatorF)
 
-{-| Create a property given a number of test cases, a name, a condition to test and a generator
 
-Example :
+{-| Check a list of properties given a random seed.
 
-    doubleNegativeIsPositive =
-      propertyN 10000
-                "Double Negative is Positive"
-                (\number -> -(-number) == number)
-                (float -300 400)
-
+    check
+      [ prop_reverseReverseList
+      , prop_numberIsOdd
+      , prop_numberIsEqualToItself
+      ]
+      (initialSeed 1)
 -}
-propertyN : Int -> String -> (a -> Bool) -> Generator a -> Property
-propertyN numberOfTests name predicate generator =
-  let listGenerator   = list numberOfTests generator
-      testCases       = generateTestCases listGenerator
-      resultPairList  = map (constructResultPair predicate) testCases
-      filteredResult  = filterFailing resultPairList
-  in
-    case filteredResult of
-      [] -> Ok ()
-      x :: xs -> Err (name, (toString (fst x)))
+check : List Property -> Seed -> TestOutput
+check properties seed = map (\f -> f seed) properties
 
 
-{-| Analog of `propertyN` for functions of two arguments
+{-| Version of check with a default initialSeed of 1
 -}
-property2N : Int -> String -> (a -> b -> Bool) -> Generator a -> Generator b -> Property
-property2N numberOfTests name predicate generatorA generatorB =
-  propertyN numberOfTests name (\(a,b) -> predicate a b) (rZip generatorA generatorB)
+simpleCheck : List Property -> TestOutput
+simpleCheck properties =
+  check properties (initialSeed 1)
 
-{-| Analog of `propertyN` for functions of three arguments
+{-| Version of check which continuously runs every second
+and uses the current time as its seed and merges test outputs.
 -}
-property3N : Int -> String -> (a -> b -> c -> Bool) -> Generator a -> Generator b -> Generator c -> Property
-property3N numberOfTests name predicate generatorA generatorB generatorC =
-  propertyN numberOfTests name (\(a,b,c) -> predicate a b c) (rZip3 generatorA generatorB generatorC)
+continuousCheck : List Property -> Signal TestOutput
+continuousCheck =
+  continuousCheckEvery second
 
-{-| Analog of `propertyN` for functions of four arguments
+
+{-| Version of check which continuously runs every given time interval
+and uses the current time as its seed and merges test outputs.
+
+    continuousCheck = continuousCheckEvery second
 -}
-property4N : Int -> String -> (a -> b -> c -> d -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Property
-property4N numberOfTests name predicate generatorA generatorB generatorC generatorD =
-  propertyN numberOfTests name (\(a,b,c,d) -> predicate a b c d) (rZip4 generatorA generatorB generatorC generatorD)
+continuousCheckEvery : Time -> List Property -> Signal TestOutput
+continuousCheckEvery time properties =
+  Signal.foldp mergeTestOutputs []
+    (Signal.map ((check properties) << initialSeed << round) (every time))
 
-{-| Analog of `propertyN` for functions of five arguments
+
+{-| Version of check which continuously runs every second
+and uses the current time as its seed and accumulates all test outputs.
 -}
-property5N : Int -> String -> (a -> b -> c -> d -> e -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Property
-property5N numberOfTests name predicate generatorA generatorB generatorC generatorD generatorE =
-  propertyN numberOfTests name (\(a,b,c,d,e) -> predicate a b c d e) (rZip5 generatorA generatorB generatorC generatorD generatorE)
-
-{-| Returns the result of checking a list of given properties as a string.
-
-Example :
-
-    check [
-      property "Identity" (\x -> x == x) (int 5 10),
-      property "Double Negative is Positive" (\n -> -(-n) == n) (float 20 100)
-    ]
-    -- Ok, passed all tests
+deepContinuousCheck : List Property -> Signal TestOutput
+deepContinuousCheck =
+  deepContinuousCheckEvery second
 
 
-    check [
-      property "No Identity" (\x -> x /= x) (float 0 2)
-    ]
-    -- No Identity has failed with the following input: 0.7185091971695677
+{-| Version of check which continuously runs every given time interval
+and uses the current time as its seed and accumulates all test outputs.
 -}
-check : List Property -> String
-check properties =
-  let errorProperties =
+deepContinuousCheckEvery : Time -> List Property -> Signal TestOutput
+deepContinuousCheckEvery time properties =
+  Signal.foldp (++) []
+    (Signal.map ((check properties) << initialSeed << round) (every time))
+
+printWith : (List String -> String) -> TestResult -> String
+printWith flattener results =
+  let errorResults =
         filter
-          (\property ->
-              case property of
-                Ok _ -> False
-                Err _ -> True)
-          properties
+          (\result ->
+            case result of
+              Ok _ -> False
+              Err _ -> True)
+          results
   in
-    if (length errorProperties == 0)
-    then "Ok, passed all tests."
+    if (length errorResults == 0)
+    then
+      case length results of
+        0 -> ""
+        n ->
+          case head results of
+            Ok {name} -> name ++ " has passed " ++ toString n ++ " tests!"
+            Err _ -> ""
     else
-      (join "\n"
+      (flattener
         (map
-          (\property ->
-              case property of
-                Ok _ -> ""
-                Err (name, value) ->
+          (\result ->
+              case result of
+                Ok {name, value, seed} ->
+                  name ++ " has passed with the following input: " ++ value
+                Err {name, value, seed} ->
                   name ++ " has failed with the following input: " ++ value)
-          errorProperties))
+          errorResults))
+
+printOne : TestResult -> String
+printOne = printWith head
+
+printMany : TestResult -> String
+printMany = printWith (join "\n")
+
+{-| Print a test output as a string.
+-}
+print : TestOutput -> String
+print results =
+  join "\n" (map printOne results)
+
+{-| Print a test output as a detailed string.
+-}
+printVerbose : TestOutput -> String
+printVerbose results =
+  join "\n" (map printMany results)
+
+{-| Display a test output as an Element.
+Useful for viewing in the browser.
+-}
+display : TestOutput -> Element
+display output =
+  let outputString = print output
+  in
+    leftAligned (monospace (fromString outputString))
+
+{-| Display a detailed test output as an Element.
+Useful for viewing in the browser.
+-}
+displayVerbose : TestOutput -> Element
+displayVerbose output =
+  let outputString = printVerbose output
+  in
+    leftAligned (monospace (fromString outputString))
 
 
 ------ From elm-random-extra -------
