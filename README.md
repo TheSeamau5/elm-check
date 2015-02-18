@@ -45,7 +45,8 @@ Now that we have our property and understand how it works, how do we check it?
 
 Simple, we use the `simpleCheck` function.
 
-`check` takes a list of properties and returns a string output. This output will tell you either that all tests have passed or it will lists the properties that have failed and point to the input that has made the property fail.
+`simpleCheck` takes a list of properties and returns a `TestOutput`. This output will tell you either that all tests have passed or it will lists the properties that have failed and point to the input that has made the property fail. You can then either `print` the `TestOutput`, in which case you will get a string or you can
+`display` the `TestOutput`, in which case you will get an `Element` (ideal for viewing in the browser).
 
 For example, were we to run the following code:
 
@@ -165,4 +166,4 @@ is because it ran several times using different seeds. This means that it has
 had a change to try a larger portion of the input space. The longer the test
 runs, the more input it tries. This means that if you run elm-check long enough
 (say, a minute or so), and find no bugs, then you can be quite confident on the
-strength and correctness of the properties you are testing. 
+strength and correctness of the properties you are testing.
