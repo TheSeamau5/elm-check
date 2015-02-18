@@ -166,6 +166,7 @@ property5N numberOfTests name predicate generatorA generatorB generatorC generat
 
 {-| Create a property given a name, a condition to test and a generator
 Example :
+
     doubleNegativeIsPositive =
       property "Double Negative is Positive"
                (\number -> -(-number) == number)
