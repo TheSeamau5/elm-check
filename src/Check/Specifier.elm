@@ -89,12 +89,6 @@ rangeInt : Int -> Int -> Specifier Int
 rangeInt min max =
   specifier (Random.int min max) Shrink.int
 
-{-| Specifier int. Generates random ints between Random.minInt and
-Random.maxInt.
--}
-anyInt : Specifier Int
-anyInt =
-  rangeInt Random.minInt Random.maxInt
 
 {-| Specifier float. Generates random floats between -50 and 50 and the `float`
 shrinker from elm-shrink. Ideal for local testing.
