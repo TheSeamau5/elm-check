@@ -24,6 +24,7 @@ import Random.Order
 import Random.Char
 import Random.String
 import Random.Maybe
+import Random.Result
 import Random.List
 import Random.Array
 
@@ -72,7 +73,13 @@ shrinker from elm-shrink. Ideal for local testing.
 -}
 int : Specifier Int
 int =
-  rangeInt -50 50
+  let generator =
+        Random.frequency
+          [ (3, Random.int -50 50)
+          , (1, Random.int Random.minInt Random.maxInt)
+          ] (Random.int -50 50)
+  in
+      specifier generator Shrink.int
 
 
 {-| Specifier int constructor. Generates random ints between a given `min`
@@ -115,7 +122,7 @@ string =
     (Shrink.string)
 
 
-{-| Specifier maybe constructor. Generators random maybe values from a given
+{-| Specifier maybe constructor. Generates random maybe values from a given
 specifier generator using the `maybe` generator constructor from
 elm-random-extra and the `maybe` shrinker constructor from elm-shrink.
 -}
@@ -124,6 +131,16 @@ maybe arby =
   specifier
     (Random.Maybe.maybe arby.generator)
     (Shrink.maybe arby.shrinker)
+
+{-| Specifier result constructor. Generates random result values from a given
+specifier generator using the `result` generator constructor from
+elm-random-extra and the `result` shrinker constrctor from elm-shrink.
+-}
+result : Specifier error -> Specifier value -> Specifier (Result error value)
+result errSpec valSpec =
+  specifier
+    (Random.Result.result errSpec.generator valSpec.generator)
+    (Shrink.result errSpec.shrinker valSpec.shrinker)
 
 {-| Specifier list constructor. Generates random lists of values of size
 between 0 and 10 from a given specifier generator using the `rangeLengthList`
