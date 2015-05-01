@@ -19,10 +19,15 @@ type alias SuccessOptions =
 type alias FailureOptions =
   { name : String
   , failingInput : String
-  , actual : String
-  , expected : String
+  , actual    : String
+  , expected  : String
+  , unshrunk  :
+    { failingInput  : String
+    , actual        : String
+    , expected      : String
+    }
   , seed : Seed
-  , numberOfTests : Int
+  , numberOfTests   : Int
   , numberOfShrinks : Int
   }
 
@@ -106,6 +111,11 @@ claim name claim1 claim2 specifier =
               , failingInput = toString minimal
               , expected = toString expected
               , actual = toString actual
+              , unshrunk =
+                { failingInput = toString failingValue
+                , actual    = toString (claim1 failingValue)
+                , expected  = toString (claim2 failingValue)
+                }
               , numberOfTests = n
               , numberOfShrinks = numberOfShrinks
               }
