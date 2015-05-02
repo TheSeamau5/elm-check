@@ -22,6 +22,8 @@ module Check where
 -- CORE LIBRARY IMPORTS --
 --------------------------
 
+import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import List
 import Random     exposing (Seed, Generator)
 import Signal     exposing (Address, Mailbox, mailbox, send)
@@ -100,11 +102,11 @@ type alias FailureOptions =
   , expected  : String
   , original  :
     { counterExample  : String
-    , actual        : String
-    , expected      : String
+    , actual    : String
+    , expected  : String
     }
   , seed : Seed
-  , numberOfChecks   : Int
+  , numberOfChecks  : Int
   , numberOfShrinks : Int
   }
 
