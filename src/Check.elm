@@ -146,38 +146,43 @@ claim name claim1 claim2 specifier =
   Claim
     (\n seed ->
       let
-          failingTestCase' seed accum =
+          -- originalCounterExample' : Seed -> Int -> Trampoline (Result (a, b, b, Seed, Int) Int)
+          originalCounterExample' seed accum =
             if accum >= n
             then
               Done (Ok n)
             else
               let
                   (value, nextSeed) = Random.generate specifier.generator seed
-                  result1 = claim1 value
-                  result2 = claim2 value
+                  actual = claim1 value
+                  expected = claim2 value
               in
-                  if result1 == result2
+                  if actual == expected
                   then
-                    Continue (\() -> failingTestCase' nextSeed (accum + 1))
+                    Continue (\() -> originalCounterExample' nextSeed (accum + 1))
                   else
-                    Done (Err (value, nextSeed, accum + 1))
+                    Done (Err (value, actual, expected, nextSeed, accum + 1))
 
-          failingTestCase =
-            trampoline (failingTestCase' seed 0)
+          -- originalCounterExample : Result (a, b, b, Seed, Int) Int
+          originalCounterExample =
+            trampoline (originalCounterExample' seed 0)
 
-      in case failingTestCase of
+      in case originalCounterExample of
         Ok n -> Unit <|
           Ok
             { name = name
             , seed = seed
             , numberOfChecks = max 0 n
             }
-        Err (failingValue, seed, n) ->
+        Err (originalCounterExample, originalActual, originalExpected, seed, n) ->
           let
+              -- shrink : a -> Int -> Trampoline (a, Int)
               shrink value numberOfShrinks =
                 let
+                    -- shrinks : List a
                     shrinks = specifier.shrinker value
 
+                    -- failingShrunks : List a
                     failingShrunks =
                       List.filter (\shrunk ->
                         not (claim1 shrunk == claim2 shrunk)
@@ -190,10 +195,15 @@ claim name claim1 claim2 specifier =
                   Just failing ->
                     Continue (\() -> shrink failing (numberOfShrinks + 1))
 
+              -- minimal : a
+              -- numberOfShrinks : Int
               (minimal, numberOfShrinks) =
-                trampoline (shrink failingValue 0)
+                trampoline (shrink originalCounterExample 0)
 
+              -- actual : b
               actual = claim1 minimal
+
+              -- expected : b
               expected = claim2 minimal
 
           in Unit <|
@@ -204,9 +214,9 @@ claim name claim1 claim2 specifier =
               , expected = toString expected
               , actual = toString actual
               , original =
-                { counterExample = toString failingValue
-                , actual    = toString (claim1 failingValue)
-                , expected  = toString (claim2 failingValue)
+                { counterExample = toString originalCounterExample
+                , actual    = toString originalActual
+                , expected  = toString originalExpected
                 }
               , numberOfChecks = n
               , numberOfShrinks = numberOfShrinks
