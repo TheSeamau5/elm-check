@@ -49,7 +49,7 @@ A claim is either a function which yields evidence regarding the claim
 or a list of such claims.
 -}
 type Claim
-  = Claim (Int -> Seed -> Evidence)
+  = Claim String (Int -> Seed -> Evidence)
   | Suite String (List Claim)
 
 {-| Evidence is the output from checking a claim or multiple claims.
@@ -150,7 +150,7 @@ claim name actualStatement expectedStatement investigator =
 -- 3. Else, shrink the counter example to a minimal representation
 -- 4. Return a failure.
 -------------------------------------------------------------------
-  Claim <|
+  Claim name <|
   -- A Claim is just a function that takes a number of checks
   -- and a random seed and returns an `Evidence` object
 
@@ -388,7 +388,7 @@ when you wish to reproduce checks.
 -}
 check : Claim -> Int -> Seed -> Evidence
 check claim n seed = case claim of
-  Claim f ->
+  Claim name f ->
     f n seed
   Suite name claims ->
     Multiple name (List.map (\c -> check c n seed) claims)
