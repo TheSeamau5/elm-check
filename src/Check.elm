@@ -150,11 +150,11 @@ claim name actualStatement expectedStatement specifier =
 -- 3. Else, shrink the counter example to a minimal representation
 -- 4. Return a failure.
 -------------------------------------------------------------------
-  Claim
+  Claim <|
   -- A Claim is just a function that takes a number of checks
   -- and a random seed and returns an `Evidence` object
 
-    (\numberOfChecks seed ->
+    \numberOfChecks seed ->
     -- `numberOfChecks` is the given number of checks which is usually
     -- passed in by the `check` function. This sets an upper bound on
     -- the number of checks performed in order to find a counter example
@@ -328,7 +328,7 @@ claim name actualStatement expectedStatement specifier =
                 , numberOfChecks = numberOfChecks
                 , numberOfShrinks = numberOfShrinks
                 }
-    )
+
 
 {-| Make a claim of truth about a system.
 
