@@ -38,7 +38,7 @@ import Random.Extra as Random
 -- LOCAL IMPORTS --
 -------------------
 
-import Check.Specifier  exposing (Specifier, tuple, tuple3, tuple4, tuple5)
+import Check.Investigator  exposing (Investigator, tuple, tuple3, tuple4, tuple5)
 
 -----------
 -- TYPES --
@@ -115,7 +115,7 @@ type alias FailureOptions =
 
 {-| Make a claim about a system.
 
-    claim nameOfClaim actualStatement expectedStatement specifier
+    claim nameOfClaim actualStatement expectedStatement investigator
 
 1. The `nameOfClaim` is a string you pass in order to name your claim.
 This is very useful when trying to debug or reading reports.
@@ -125,9 +125,9 @@ result of the `expectedStatement`.
 3. The `expectedStatement` is a function which states something which
 the `actualStatement` should conform to or be equivalent to. The result of
 which will be compared by equality `==` to the result of the `actualStatement`.
-4. The `specifier` is a specifier used to generate random values to be passed
+4. The `investigator` is an investigator used to generate random values to be passed
 to the `actualStatement` and `expectedStatement` in order to attempt to
-disprove the claim. If a counter example is found, the `specifier` will then
+disprove the claim. If a counter example is found, the `investigator` will then
 shrink the counter example until it yields a minimal counter example which
 is then easy to debug.
 
@@ -141,8 +141,8 @@ Example :
         (list int)
 
 -}
-claim : String -> (a -> b) -> (a -> b) -> Specifier a -> Claim
-claim name actualStatement expectedStatement specifier =
+claim : String -> (a -> b) -> (a -> b) -> Investigator a -> Claim
+claim name actualStatement expectedStatement investigator =
 -------------------------------------------------------------------
 -- QuickCheck Algorithm with Shrinking :
 -- 1. Find a counter example within a given number of checks
@@ -191,7 +191,7 @@ claim name actualStatement expectedStatement specifier =
                   --------------------------------------------------------------
                   -- Body of loop:
                   -- 1. We generate a new random value and the next seed using
-                  --    the specifier's random generator and the previous seed.
+                  --    the investigator's random generator and the previous seed.
                   -- 2. We calculate the actual outcome and the expected
                   --    outcome from the given `actualStatement` and
                   --    `expectedStatement` respectively
@@ -201,7 +201,7 @@ claim name actualStatement expectedStatement specifier =
                   --    checks
                   -- 5. Else, we have found our counter example.
                   --------------------------------------------------------------
-                  (value, nextSeed) = Random.generate specifier.generator seed
+                  (value, nextSeed) = Random.generate investigator.generator seed
                   actual    = actualStatement value
                   expected  = expectedStatement value
               in
@@ -260,7 +260,7 @@ claim name actualStatement expectedStatement specifier =
                     -- the given `counterExample`.
 
                     -- shrunkenCounterExamples : List a
-                    shrunkenCounterExamples = specifier.shrinker counterExample
+                    shrunkenCounterExamples = investigator.shrinker counterExample
 
 
                     -- Keep only the counter examples that disprove the claim.
@@ -336,7 +336,7 @@ Similar to `claim`, `claimTrue` only considers claims which always yield `True`
 to be true. If `claimTrue` manages to find an input which causes the given
 predicate to yield `False`, then it will consider that as the counter example.
 
-    claimTrue nameOfClaim predicate specifier
+    claimTrue nameOfClaim predicate investigator
 
 
 Example:
@@ -346,7 +346,7 @@ Example:
         (\list -> List.length list >= 0)
         (list string)
 -}
-claimTrue : String -> (a -> Bool) -> Specifier a -> Claim
+claimTrue : String -> (a -> Bool) -> Investigator a -> Claim
 claimTrue name predicate =
   claim name predicate (always True)
 
@@ -358,7 +358,7 @@ Analogous to `claimTrue`, `claimFalse` only considers claims which always yield
 given predicate to yield `True`, then it will consider that as the counter
 example.
 
-    claimFalse nameOfClaim predicate specifier
+    claimFalse nameOfClaim predicate investigator
 
 
 Example:
@@ -368,7 +368,7 @@ Example:
       (\list -> List.length list < 0)
       (list float)
 -}
-claimFalse : String -> (a -> Bool) -> Specifier a -> Claim
+claimFalse : String -> (a -> Bool) -> Investigator a -> Claim
 claimFalse name predicate =
   claim name predicate (always False)
 
@@ -425,51 +425,51 @@ suite name claims =
 -- MULTI-ARITY CLAIMS --
 ------------------------
 
-claim2 : String -> (a -> b -> c) -> (a -> b -> c) -> Specifier a -> Specifier b -> Claim
+claim2 : String -> (a -> b -> c) -> (a -> b -> c) -> Investigator a -> Investigator b -> Claim
 claim2 name actualStatement expectedStatement specA specB =
   claim name (\(a, b) -> actualStatement a b) (\(a, b) -> expectedStatement a b) (tuple (specA, specB))
 
-claim2True : String -> (a -> b -> Bool) -> Specifier a -> Specifier b -> Claim
+claim2True : String -> (a -> b -> Bool) -> Investigator a -> Investigator b -> Claim
 claim2True name predicate =
   claim2 name predicate (\_ _ -> True)
 
-claim2False : String -> (a -> b -> Bool) -> Specifier a -> Specifier b -> Claim
+claim2False : String -> (a -> b -> Bool) -> Investigator a -> Investigator b -> Claim
 claim2False name predicate =
   claim2 name predicate (\_ _ -> False)
 
-claim3 : String -> (a -> b -> c -> d) -> (a -> b -> c -> d) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3 : String -> (a -> b -> c -> d) -> (a -> b -> c -> d) -> Investigator a -> Investigator b -> Investigator c -> Claim
 claim3 name actualStatement expectedStatement specA specB specC =
   claim name (\(a, b, c) -> actualStatement a b c) (\(a, b, c) -> expectedStatement a b c) (tuple3 (specA, specB, specC))
 
-claim3True : String -> (a -> b -> c -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3True : String -> (a -> b -> c -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Claim
 claim3True name predicate =
   claim3 name predicate (\_ _ _ -> True)
 
-claim3False : String -> (a -> b -> c -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3False : String -> (a -> b -> c -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Claim
 claim3False name predicate =
   claim3 name predicate (\_ _ _ -> False)
 
-claim4 : String -> (a -> b -> c -> d -> e) -> (a -> b -> c -> d -> e) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4 : String -> (a -> b -> c -> d -> e) -> (a -> b -> c -> d -> e) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
 claim4 name actualStatement expectedStatement specA specB specC specD =
   claim name (\(a, b, c, d) -> actualStatement a b c d) (\(a, b, c, d) -> expectedStatement a b c d) (tuple4 (specA, specB, specC, specD))
 
-claim4True : String -> (a -> b -> c -> d -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4True : String -> (a -> b -> c -> d -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
 claim4True name predicate =
   claim4 name predicate (\_ _ _ _ -> True)
 
-claim4False : String -> (a -> b -> c -> d -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4False : String -> (a -> b -> c -> d -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
 claim4False name predicate =
   claim4 name predicate (\_ _ _ _ -> False)
 
 
-claim5 : String -> (a -> b -> c -> d -> e -> f) -> (a -> b -> c -> d -> e -> f) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5 : String -> (a -> b -> c -> d -> e -> f) -> (a -> b -> c -> d -> e -> f) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
 claim5 name actualStatement expectedStatement specA specB specC specD specE =
   claim name (\(a, b, c, d, e) -> actualStatement a b c d e) (\(a, b, c, d, e) -> expectedStatement a b c d e) (tuple5 (specA, specB, specC, specD, specE))
 
-claim5True : String -> (a -> b -> c -> d -> e -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5True : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
 claim5True name predicate =
   claim5 name predicate (\_ _ _ _ _ -> True)
 
-claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
 claim5False name predicate =
   claim5 name predicate (\_ _ _ _ _ -> False)

@@ -8,7 +8,7 @@
     ],
     "exposed-modules": [
       "Check",
-      "Check.Specifier"
+      "Check.Investigator"
     ],
     "dependencies": {
         "TheSeamau5/elm-random-extra": "2.1.0 <= v < 3.0.0",
