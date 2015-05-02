@@ -8,8 +8,6 @@ module Check.Test where
 @docs test2, test3, test4, test5, assert2, assert3, assert4, assert5
 
 -}
-
-import Check exposing (check)
 import Check.Investigator as Investigator exposing (Investigator, tuple, tuple3, tuple4, tuple5)
 import Trampoline exposing (Trampoline(..), trampoline)
 import ElmTest.Test as Test exposing (Test)
