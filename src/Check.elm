@@ -11,7 +11,7 @@ module Check where
 @docs suite
 
 # Types
-@docs Claim, TestResult, UnitTestResult, SuccessOptions, FailureOptions
+@docs Claim, Evidence, UnitEvidence, SuccessOptions, FailureOptions
 
 # Multi-arity claims
 @docs claim2, claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
@@ -44,35 +44,67 @@ import Random.Extra as Random
 -- TYPES --
 -----------
 
+{-| A Claim is an object that makes a claim of truth about a system.
+A claim is either a function which yields evidence regarding the claim
+or a list of such claims.
+-}
 type Claim
-  = Claim (Int -> Seed -> TestResult)
+  = Claim (Int -> Seed -> Evidence)
   | Suite String (List Claim)
 
-type TestResult
-  = Unit UnitTestResult
-  | Multiple String (List TestResult)
+{-| Evidence is the output from checking a claim or multiple claims.
+-}
+type Evidence
+  = Unit UnitEvidence
+  | Multiple String (List Evidence)
 
-type alias UnitTestResult =
+{-| UnitEvidence is the concrete type returned by checking a single claim.
+A UnitEvidence can easily be converted to an assertion or can be considered
+as the result of an assertion.
+-}
+type alias UnitEvidence =
   Result FailureOptions SuccessOptions
 
+{-| SuccessOptions is the concrete type returned in case there is no evidence
+found disproving a Claim.
+
+SuccessOptions contains:
+1. the `name` of the claim
+2. the number of checks performed
+3. the `seed` used in order to reproduce the check.
+-}
 type alias SuccessOptions =
   { name : String
   , seed : Seed
-  , numberOfTests : Int
+  , numberOfChecks : Int
   }
 
+{-| FailureOptions is the concrete type returned in case evidence was found
+disproving a Claim.
+
+FailureOptions contains:
+1. the `name` of the claim
+2. the minimal `counterExample` which serves as evidence that the claim is false
+3. the value `expected` to be returned by the claim
+4. the `actual` value returned by the claim
+5. the `seed` used in order to reproduce the results
+6. the number of checks performed
+7. the number of shrinking operations performed
+8. the original `counterExample`, `actual`, and `expected` values found prior
+to performing the shrinking operations.
+-}
 type alias FailureOptions =
   { name : String
-  , failingInput : String
+  , counterExample : String
   , actual    : String
   , expected  : String
-  , unshrunk  :
-    { failingInput  : String
+  , original  :
+    { counterExample  : String
     , actual        : String
     , expected      : String
     }
   , seed : Seed
-  , numberOfTests   : Int
+  , numberOfChecks   : Int
   , numberOfShrinks : Int
   }
 
@@ -81,6 +113,34 @@ type alias FailureOptions =
 -- MAKE A CLAIM --
 ------------------
 
+{-| Make a claim about a system.
+
+    claim nameOfClaim actualStatement expectedStatement specifier
+
+1. The `nameOfClaim` is a string you pass in order to name your claim.
+This is very useful when trying to debug or reading reports.
+2. The `actualStatement` is a function which states something about your
+system. The result of which will be compared by equality `==` to the
+result of the `expectedStatement`.
+3. The `expectedStatement` is a function which states something which
+the `actualStatement` should conform to or be equivalent to. The result of
+which will be compared by equality `==` to the result of the `actualStatement`.
+4. The `specifier` is a specifier used to generate random values to be passed
+to the `actualStatement` and `expectedStatement` in order to attempt to
+disprove the claim. If a counter example is found, the `specifier` will then
+shrink the counter example until it yields a minimal counter example which
+is then easy to debug.
+
+
+Example :
+
+    claim_sort_idempotent =
+      claim "Sort is idempotent"
+        (\list -> List.sort (List.sort (list))
+        (\list -> List.sort (list))
+        (list int)
+
+-}
 claim : String -> (a -> b) -> (a -> b) -> Specifier a -> Claim
 claim name claim1 claim2 specifier =
   Claim
@@ -110,7 +170,7 @@ claim name claim1 claim2 specifier =
           Ok
             { name = name
             , seed = seed
-            , numberOfTests = max 0 n
+            , numberOfChecks = max 0 n
             }
         Err (failingValue, seed, n) ->
           let
@@ -140,23 +200,57 @@ claim name claim1 claim2 specifier =
             Err
               { name = name
               , seed = seed
-              , failingInput = toString minimal
+              , counterExample = toString minimal
               , expected = toString expected
               , actual = toString actual
-              , unshrunk =
-                { failingInput = toString failingValue
+              , original =
+                { counterExample = toString failingValue
                 , actual    = toString (claim1 failingValue)
                 , expected  = toString (claim2 failingValue)
                 }
-              , numberOfTests = n
+              , numberOfChecks = n
               , numberOfShrinks = numberOfShrinks
               }
     )
 
+{-| Make a claim of truth about a system.
+
+Similar to `claim`, `claimTrue` only considers claims which always yield `True`
+to be true. If `claimTrue` manages to find an input which causes the given
+predicate to yield `False`, then it will consider that as the counter example.
+
+    claimTrue nameOfClaim predicate specifier
+
+
+Example:
+
+    claim_length_list_nonnegative =
+      claimTrue "The length of a list is strictly non-negative"
+        (\list -> List.length list >= 0)
+        (list string)
+-}
 claimTrue : String -> (a -> Bool) -> Specifier a -> Claim
 claimTrue name predicate =
   claim name predicate (always True)
 
+
+{-| Make a claim of falsiness about a system.
+
+Analogous to `claimTrue`, `claimFalse` only considers claims which always yield
+`False` to be true. If `claimFalse` manages to find an input which causes the
+given predicate to yield `True`, then it will consider that as the counter
+example.
+
+    claimFalse nameOfClaim predicate specifier
+
+
+Example:
+
+    claim_length_list_never_negative =
+      claimFalse "The length of a list is never negative"
+      (\list -> List.length list < 0)
+      (list float)
+-}
 claimFalse : String -> (a -> Bool) -> Specifier a -> Claim
 claimFalse name predicate =
   claim name predicate (always False)
@@ -166,7 +260,16 @@ claimFalse name predicate =
 -- CHECK A CLAIM --
 -------------------
 
-check : Claim -> Int -> Seed -> TestResult
+{-| Check a claim.
+
+To check a claim, you need to provide the number of checks which check will
+perform as well a random seed. Given a random seed and a number of checks,
+`check` will always yield the same result. Thus, `check` is especially useful
+when you wish to reproduce checks.
+
+    check claim numberOfChecks seed
+-}
+check : Claim -> Int -> Seed -> Evidence
 check claim n seed = case claim of
   Claim f ->
     f n seed
@@ -174,7 +277,15 @@ check claim n seed = case claim of
     Multiple name (List.map (\c -> check c n seed) claims)
 
 
-quickCheck : Claim -> TestResult
+{-| Quick check a claim.
+
+This function is very useful when checking claims locally. `quickCheck` will
+perform 100 checks and use `Random.initialSeed 1` as the random seed.
+
+    quickCheck claim =
+      check claim 100 (Random.initialSeed 1)
+-}
+quickCheck : Claim -> Evidence
 quickCheck claim =
   check claim 100 (Random.initialSeed 1)
 
@@ -183,6 +294,11 @@ quickCheck claim =
 -- GROUP CLAIMS INTO A SUITE --
 -------------------------------
 
+{-| Group a list of claims into a suite. This is very useful in order to
+group similar claims together.
+
+    suite nameOfSuite listOfClaims
+-}
 suite : String -> List Claim -> Claim
 suite name claims =
   Suite name claims
