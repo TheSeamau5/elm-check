@@ -1,14 +1,59 @@
 module Check where
+{-| Property Based Testing module in Elm.
 
+# Make a claim
+@docs claim, claimTrue, claimFalse
 
-import Check.Specifier exposing (Specifier, tuple, tuple3, tuple4, tuple5)
-import Random    exposing (Seed, Generator)
-import Random.Extra as Random
-import Trampoline exposing (Trampoline(..), trampoline)
+# Check a claim
+@docs quickCheck, check
+
+# Group claims into a suite
+@docs suite
+
+# Types
+@docs Claim, TestResult, UnitTestResult, SuccessOptions, FailureOptions
+
+# Multi-arity claims
+@docs claim2, claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
+
+-}
+
+--------------------------
+-- CORE LIBRARY IMPORTS --
+--------------------------
+
 import List
-import Signal exposing (Address, Mailbox, mailbox, send)
-import Task exposing (Task)
+import Random     exposing (Seed, Generator)
+import Signal     exposing (Address, Mailbox, mailbox, send)
+import Task       exposing (Task)
+import Trampoline exposing (Trampoline(..), trampoline)
 
+-------------------------
+-- THIRD PARTY IMPORTS --
+-------------------------
+
+import Check.Specifier  exposing (Specifier, tuple, tuple3, tuple4, tuple5)
+
+-------------------
+-- LOCAL IMPORTS --
+-------------------
+
+import Random.Extra as Random
+
+-----------
+-- TYPES --
+-----------
+
+type Claim
+  = Claim (Int -> Seed -> TestResult)
+  | Suite String (List Claim)
+
+type TestResult
+  = Unit UnitTestResult
+  | Multiple String (List TestResult)
+
+type alias UnitTestResult =
+  Result FailureOptions SuccessOptions
 
 type alias SuccessOptions =
   { name : String
@@ -31,23 +76,10 @@ type alias FailureOptions =
   , numberOfShrinks : Int
   }
 
-type alias UnitTestResult = Result FailureOptions SuccessOptions
 
-type TestResult
-  = Unit UnitTestResult
-  | Multiple String (List TestResult)
-
-type Claim
-  = Claim (Int -> Seed -> TestResult)
-  | Suite String (List Claim)
-
-
-suite : String -> List Claim -> Claim
-suite name claims =
-  Suite name claims
-
-
-
+------------------
+-- MAKE A CLAIM --
+------------------
 
 claim : String -> (a -> b) -> (a -> b) -> Specifier a -> Claim
 claim name claim1 claim2 specifier =
@@ -121,25 +153,18 @@ claim name claim1 claim2 specifier =
               }
     )
 
+claimTrue : String -> (a -> Bool) -> Specifier a -> Claim
+claimTrue name predicate =
+  claim name predicate (always True)
+
+claimFalse : String -> (a -> Bool) -> Specifier a -> Claim
+claimFalse name predicate =
+  claim name predicate (always False)
 
 
-claim2 : String -> (a -> b -> c) -> (a -> b -> c) -> Specifier a -> Specifier b -> Claim
-claim2 name claim1 claim2 specA specB =
-  claim name (\(a, b) -> claim1 a b) (\(a, b) -> claim2 a b) (tuple (specA, specB))
-
-
-claim3 : String -> (a -> b -> c -> d) -> (a -> b -> c -> d) -> Specifier a -> Specifier b -> Specifier c -> Claim
-claim3 name claim1 claim2 specA specB specC =
-  claim name (\(a, b, c) -> claim1 a b c) (\(a, b, c) -> claim2 a b c) (tuple3 (specA, specB, specC))
-
-claim4 : String -> (a -> b -> c -> d -> e) -> (a -> b -> c -> d -> e) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
-claim4 name claim1 claim2 specA specB specC specD =
-  claim name (\(a, b, c, d) -> claim1 a b c d) (\(a, b, c, d) -> claim2 a b c d) (tuple4 (specA, specB, specC, specD))
-
-claim5 : String -> (a -> b -> c -> d -> e -> f) -> (a -> b -> c -> d -> e -> f) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
-claim5 name claim1 claim2 specA specB specC specD specE =
-  claim name (\(a, b, c, d, e) -> claim1 a b c d e) (\(a, b, c, d, e) -> claim2 a b c d e) (tuple5 (specA, specB, specC, specD, specE))
-
+-------------------
+-- CHECK A CLAIM --
+-------------------
 
 check : Claim -> Int -> Seed -> TestResult
 check claim n seed = case claim of
@@ -152,3 +177,66 @@ check claim n seed = case claim of
 quickCheck : Claim -> TestResult
 quickCheck claim =
   check claim 100 (Random.initialSeed 1)
+
+
+-------------------------------
+-- GROUP CLAIMS INTO A SUITE --
+-------------------------------
+
+suite : String -> List Claim -> Claim
+suite name claims =
+  Suite name claims
+
+
+------------------------
+-- MULTI-ARITY CLAIMS --
+------------------------
+
+claim2 : String -> (a -> b -> c) -> (a -> b -> c) -> Specifier a -> Specifier b -> Claim
+claim2 name claim1 claim2 specA specB =
+  claim name (\(a, b) -> claim1 a b) (\(a, b) -> claim2 a b) (tuple (specA, specB))
+
+claim2True : String -> (a -> b -> Bool) -> Specifier a -> Specifier b -> Claim
+claim2True name predicate =
+  claim2 name predicate (\_ _ -> True)
+
+claim2False : String -> (a -> b -> Bool) -> Specifier a -> Specifier b -> Claim
+claim2False name predicate =
+  claim2 name predicate (\_ _ -> False)
+
+claim3 : String -> (a -> b -> c -> d) -> (a -> b -> c -> d) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3 name claim1 claim2 specA specB specC =
+  claim name (\(a, b, c) -> claim1 a b c) (\(a, b, c) -> claim2 a b c) (tuple3 (specA, specB, specC))
+
+claim3True : String -> (a -> b -> c -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3True name predicate =
+  claim3 name predicate (\_ _ _ -> True)
+
+claim3False : String -> (a -> b -> c -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Claim
+claim3False name predicate =
+  claim3 name predicate (\_ _ _ -> False)
+
+claim4 : String -> (a -> b -> c -> d -> e) -> (a -> b -> c -> d -> e) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4 name claim1 claim2 specA specB specC specD =
+  claim name (\(a, b, c, d) -> claim1 a b c d) (\(a, b, c, d) -> claim2 a b c d) (tuple4 (specA, specB, specC, specD))
+
+claim4True : String -> (a -> b -> c -> d -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4True name predicate =
+  claim4 name predicate (\_ _ _ _ -> True)
+
+claim4False : String -> (a -> b -> c -> d -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Claim
+claim4False name predicate =
+  claim4 name predicate (\_ _ _ _ -> False)
+
+
+claim5 : String -> (a -> b -> c -> d -> e -> f) -> (a -> b -> c -> d -> e -> f) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5 name claim1 claim2 specA specB specC specD specE =
+  claim name (\(a, b, c, d, e) -> claim1 a b c d e) (\(a, b, c, d, e) -> claim2 a b c d e) (tuple5 (specA, specB, specC, specD, specE))
+
+claim5True : String -> (a -> b -> c -> d -> e -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5True name predicate =
+  claim5 name predicate (\_ _ _ _ _ -> True)
+
+claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Specifier a -> Specifier b -> Specifier c -> Specifier d -> Specifier e -> Claim
+claim5False name predicate =
+  claim5 name predicate (\_ _ _ _ _ -> False)
