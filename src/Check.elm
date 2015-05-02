@@ -23,7 +23,7 @@ module Check where
 --------------------------
 
 import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode
+import Json.Encode as Encode exposing (Value)
 import List
 import Random     exposing (Seed, Generator)
 import Signal     exposing (Address, Mailbox, mailbox, send)
@@ -110,7 +110,32 @@ type alias FailureOptions =
   , numberOfShrinks : Int
   }
 
+{-}
+encode_failureOptions : FailureOptions -> Value
+encode_failureOptions options =
+  Encode.object
+    [ ("name", Encode.string options.name)
+    , ("counterExample", Encode.string options.counterExample)
+    , ("actual", Encode.string options.actual)
+    , ("expected", Encode.string options.expected)
+    , ("original",
+          Encode.object
+            [ ("counterExample", Encode.string options.original.counterExample)
+            , ("actual", Encode.string options.original.actual)
+            , ("expected", Encode.string options.original.expected)
+            ]
 
+      )
+    , ("seed",
+        let (s0, s1) = case options.seed.state of
+              State s0 s1 -> (s0, s1)
+        in
+            Encode.list [Encode.int s0, Encode.int s1]
+      )
+    , ("numberOfChecks", Encode.int options.numberOfChecks)
+    , ("numberOfShrinks", Encode.int options.numberOfShrinks)
+    ]
+-}
 ------------------
 -- MAKE A CLAIM --
 ------------------
