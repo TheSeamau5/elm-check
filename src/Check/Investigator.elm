@@ -12,7 +12,7 @@ migrating from local to cloud-based.
 @docs Investigator, investigator
 
 # Basic Investigator Generators
-@docs void, bool, order, int, float, char, string, maybe, list, array, tuple, tuple3, tuple4, tuple5
+@docs void, bool, order, int, float, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5
 
 -}
 import Array  exposing (Array)
@@ -107,9 +107,29 @@ float =
 from elm-random-extra and the `char` shrinker from elm-shrink. Ideal for local
 testing or if your domain deals exclusively with ascii.
 -}
+ascii : Investigator Char
+ascii =
+  investigator (Random.Char.ascii) Shrink.char
+
+
+{-| Investigator char. Generates random ascii chars disregarding the control
+characters using the `char 32 127` generator from elm-random-extra and the
+`character` shrinker from elm-shrink. Ideal for local testing or if your
+domain deals exclusively with ascii and you do not care about control
+characters.
+-}
 char : Investigator Char
 char =
-  investigator (Random.Char.ascii) Shrink.char
+  investigator (Random.Char.char 32 127) Shrink.character
+
+
+{-| Investigator char. Generates a random UTF-8 character using the
+`unicode` generator from elm-random-extra and the `char` shrinker from
+elm-shrink.
+-}
+unicode : Investigator Char
+unicode =
+  investigator (Random.Char.unicode) Shrink.char
 
 {-| Investigator string. Generates random ascii strings of size between 0 and 10
 using the `rangeLengthString` generator from elm-random-extra and the `string`
@@ -216,7 +236,7 @@ tuple5 (invA, invB, invC, invD, invE) =
 shrink : Investigator a -> Shrinker a
 shrink = .shrinker
 
-{-| Extract a Random Generator from and Investigator generator.
+{-| Extract a Random Generator from and an Investigator generator.
 -}
 random : Investigator a -> Generator a
 random = .generator
