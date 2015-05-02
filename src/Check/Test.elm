@@ -17,7 +17,7 @@ import ElmTest.Assertion as Test
 import Random exposing (Seed)
 import List
 
-{-| Analogous to `check`. Will generate a given number of unit tests for given
+{-| Analogous to `claim`. Will generate a given number of unit tests for given
 actual and expected statements. If a unit tests fails, `test` will also generate
 an additional test representing a minimal input using shrinking.
 -}
@@ -88,6 +88,9 @@ test name actualStatement expectedStatement investigator numberOfTests seed =
           Test.suite name (shrinkTest :: tests)
 
 
+{-| Assert that a given predicate always yields true for a given investigator.
+Analogous to `claimTrue`.
+-}
 assert : String -> (a -> Bool) -> Investigator a -> Int -> Seed -> Test
 assert name predicate investigator numberOfTests seed =
   let
