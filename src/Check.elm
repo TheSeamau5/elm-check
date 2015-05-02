@@ -32,13 +32,13 @@ import Trampoline exposing (Trampoline(..), trampoline)
 -- THIRD PARTY IMPORTS --
 -------------------------
 
-import Check.Specifier  exposing (Specifier, tuple, tuple3, tuple4, tuple5)
+import Random.Extra as Random
 
 -------------------
 -- LOCAL IMPORTS --
 -------------------
 
-import Random.Extra as Random
+import Check.Specifier  exposing (Specifier, tuple, tuple3, tuple4, tuple5)
 
 -----------
 -- TYPES --
@@ -303,7 +303,7 @@ claim name actualStatement expectedStatement specifier =
               expected  = expectedStatement minimal
 
           in
-          
+
             -- Here, we return an `Err` signifying that a counter example was
             -- found. The returned record contains a number of fields and
             -- values useful for diagnostics, such as the counter example,
