@@ -80,6 +80,7 @@ import Trampoline exposing (Trampoline(..), trampoline)
 -------------------------
 
 import Random.Extra as Random
+import TaskTutorial exposing (getCurrentTime)
 
 -------------------
 -- LOCAL IMPORTS --
@@ -546,10 +547,11 @@ claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Inv
 claim5False name predicate =
   claim5 name predicate (\_ _ _ _ _ -> False)
 
+
+
 ---------
 -- DSL --
 ---------
-
 
 that : ((a -> b) -> (a -> b) -> Investigator a -> Claim) -> (a -> b) -> ((a -> b) -> Investigator a -> Claim)
 that f x = f x
