@@ -16,6 +16,51 @@ module Check where
 # Multi-arity claims
 @docs expectedStatement, claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
 
+# DSL
+
+`elm-check` provides a shorthand DSL for authoring claims. The goal of this
+DSL is to help improve readability and encode intent in the phrasing of your
+test code.
+
+With the DSL, claims read as either:
+
+1. claim - (string) - that - (actual) - is - (expected) - for - (investigator)
+2. claim - (string) - true - (predicate) - for - (investigator)
+3. claim - (string) - false - (predicate) - for - (investigator)
+
+
+**Example:**
+
+    claim_multiplication_by_one_noop =
+      claim
+        "Multiplying by one does not change a number"
+      `true`
+        (\n -> n * 1 == n)
+      `for`
+        int
+
+    claim_reverse_append =
+      claim
+        "Append then reverse is equivalent to reverse then append"
+      `that`
+        (\(l1, l2) -> List.reverse (l1 ++ l2))
+      `is`
+        (\(l1, l2) -> List.reverse l1 ++ List.reverse l2)
+      `for`
+        tuple (list int, list int)
+
+
+It is important to note that, if you wish to deal with multi-arity functions
+using this DSL, you must deal explicitly in tuples.
+
+*Warning: The DSL follows a very strict format. Deviating from this format will
+yield potentially unintelligible type errors. While not all of the type errors
+are strictly necessary, they are there to ensure that the test is authored in
+a uniform way. As a result, the following functions have horrendous type
+signatures and you are better off ignoring them.*
+
+@docs that, is, for, true, false
+
 -}
 
 --------------------------
@@ -500,3 +545,25 @@ claim5True name predicate =
 claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
 claim5False name predicate =
   claim5 name predicate (\_ _ _ _ _ -> False)
+
+---------
+-- DSL --
+---------
+
+
+that : ((a -> b) -> (a -> b) -> Investigator a -> Claim) -> (a -> b) -> ((a -> b) -> Investigator a -> Claim)
+that f x = f x
+
+is : ((a -> b) -> Investigator a -> Claim) -> (a -> b) -> (Investigator a -> Claim)
+is f x = f x
+
+for : (Investigator a -> Claim) -> Investigator a -> Claim
+for f x = f x
+
+true : ((a -> Bool) -> (a -> Bool) -> Investigator a -> Claim) -> (a -> Bool) -> (Investigator a -> Claim)
+true f pred =
+  f pred (always True)
+
+false : ((a -> Bool) -> (a -> Bool) -> Investigator a -> Claim) -> (a -> Bool) -> (Investigator a -> Claim)
+false f pred =
+  f pred (always False)
