@@ -1,169 +1,189 @@
 # Property Based Testing in Elm with elm-check
 
-Property based testing is a way to generate tests for your code and automate the testing procedure. The problem with testing is that unit testing gets very tedious and unfortunately a large class of bugs manage to pass the unit tests simply because not enough unit tests were written. This is often true because in many cases it may be intractable to test all (or even a large sample) of the input space. As a result, property-based testing depends on the heavy use of random generators.
+Property-based testing is a style of testing that focuses on making claims about your system and attempting to disprove these claims. The goal of `elm-check` is to automate this process.
+
+The most common method of testing is unit-testing. Unit-testing consists in manually stating assertions that certain inputs yield certain outputs. While familiar, this approach has several drawbacks.
+
+1. Writing assertions is a very boring and tedious process.
+2. More often than not, the inputs chosen to test are completely arbitrary and may give little insight to the correctness of your system.
+3. Even if a unit test did fail, the failed unit may or may not be helpful to diagnose your problem.
+
+The way `elm-check` solves these problems is by
+
+1. Automate the generation of unit tests
+2. Use random number generation to explore an arbitrarily large sample of your input space
+3. Compute a minimal failing case which is then more representative of the issue encountered in your system by the test.
 
 
 # How it works
 
-elm-check is very simple. You specify the properties you wish to test and you call `simpleCheck` on all these properties.
+`elm-check` is centered around the idea of `claims` and `investigator`. You make a claim of truth about your system and have an investigator check the claim.
 
-So, what is a property?
-
-A property is a condition which your code must satisfy.
-
-For example, a property of square roots is that the square root of a number squared is equal to the original number. In essence, square root is the inverse of square.
-
-In elm-check, you can define this property as follows:
+For example, suppose you wanted to test a function to reverse a list of elements.
 
 ```elm
-prop_squareRootInverse =
-  property "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
+reverse : List a -> List a
 ```
 
-`property` is a function that takes in 3 arguments, the name of a property (this is a useful name good for seeing the output and for documentation), the actual condition the property describes, and a random generator. We'll come back to the random generator in a bit, but let's focus on the condition.
+For this to be a correct `reverse` function, there are a number of properties that must hold true, such as:
 
-The condition in the above example is represented by this function:
+1. Reversing a list twice yields the original list
+2. Reversing does not modify the length of a list
+
+You can make these claims in `elm-check` as follows:
 
 ```elm
-\number -> sqrt (number * number) == number
+claim_reverse_twice_yields_original =
+  claim
+    "Reversing a list twice yields the original list"
+  `that`
+    (\list -> reverse (reverse list))
+  `is`
+    (identity)
+  `for`
+    list int
+
+
+claim_reverse_does_not_modify_length =
+  claim
+    "Reversing a list does not modify its length"
+  `that`
+    (\list -> length (reverse list))
+  `is`
+    (\list -> length list)
+  `for`
+    list int
 ```
 
-As you can see, the function is one that takes in a number and returns true if in fact the square root of the number squared is equal to the number itself.
+As, you can see, `elm-check` defines a [DSL](https://en.wikipedia.org/wiki/Domain-specific_language) for writing claims. The code reads very simply.
 
-While this is what you want to test, the question is, how does one supply values to this function? This is where the random generator comes into play.
+The first claim claims that reversing a list twice yields the original list. The string passed to claim is used for displaying, so make it as descriptive as necessary. Then `that` takes your actual statement about `reverse`, i.e. reversing it twice. `is` takes your expected statement about `reverse`, i.e. that it is the identity function. This is analogous to expected vs actual in unit testing. You expect that reversing a list twice is equivalent to not doing anything to the list. `for` then takes an investigator for the claim. In this case, `list int` will investigate the space of possible lists of integers and will try to disprove the claim.
 
-The random generator used in this example is
+
+
+You can then test each claim individually using the `quickCheck` function:
 
 ```elm
-float 0 100
+result1 = quickCheck claim_reverse_twice_yields_original
+result2 = quickCheck claim_reverse_does_not_modify_length
 ```
 
-This is a random generator that will generate a random float between 0 and 100. You may specify your generators to be as precise or as wide reaching as you need them to be.
-
-
-Now that we have our property and understand how it works, how do we check it?
-
-Simple, we use the `simpleCheck` function.
-
-`simpleCheck` takes a list of properties and returns a `TestOutput`. This output will tell you either that all tests have passed or it will lists the properties that have failed and point to the input that has made the property fail. You can then either `print` the `TestOutput`, in which case you will get a string or you can
-`display` the `TestOutput`, in which case you will get an `Element` (ideal for viewing in the browser).
-
-For example, were we to run the following code:
+Or you can group these claims in a suite and check the suite:
 
 ```elm
-import Check (..)
-import Random (..)
-
-import Text (plainText)
-
-
-tests =
-  simpleCheck [
-    property "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
-  ]
-
-main = display tests
-```
-
-
-We would get :
-
-```
-Square Root Inverse has passed 100 tests!
-```
-
-But, if we just modified the function a teeny weeny bit and made it wrong:
-
-```elm
-(\number -> sqrt (number * number) + 1 == number)
-```
-
-We would get the following output:
-
-```elm
-Square Root Inverse has failed with the following input: 35.92545985847839
-```
-
-As you can see, this failure has been determined without having to resort to writing any unit tests manually. Basically, elm-check does that for you. It uses the random generator that you pass to it to generate as many test cases as it can. How many test cases does it generate?
-
-Well, by default, `property` generates 100 test cases. If you need more or fewer test cases (which depends of the nature of the input data), you can use `propertyN` which takes an additional parameter specifying the number of test cases to generate.
-
-So, we can rewrite the above property as :
-
-```elm
-prop_squareRootInverse =
-  propertyN 1000 "Square Root Inverse" (\number -> sqrt (number * number) == number) (float 0 100)
-```
-
-Now, this will generate 1,000 cases instead of 100.
-
-# Continuous checking
-
-While, this strategy can find a number of bugs, certain bugs are quite hard to find.
-
-For example, let's consider the following property:
-
-```elm
-prop_discontinuous : Property
-prop_discontinuous =
-  property "discontinuous" (\x -> (x - 1) // (x - 1) == 1) (int 0 10000)
-```
-
-This property tests if a number divided by itself is equal to 1 except that it has a slight twist,
-the property has a discontinuity at `x == 1`. This means that this property should fail if `x` were
-set to `1`.
-
-Except, if we actually tried it, we get the result:
-
-```
-discontinuous has passed 100 tests!
-```
-
-This means that it has passed all the tests. In order to find the bug we would need to run it more than
-100 times. One way is to change from `property` to `propertyN`, but then again, this is hard coding
-the number of attempts elm-check would try.
-
-Another, better, way would be to use `continuousCheck` as follows:
-
-```elm
-import Random (..)
-import Check (..)
-import Signal (..)
-
-
-prop_discontinuous : Property
-prop_discontinuous =
-  property "discontinuous" (\x -> (x - 1) // (x - 1) == 1) (int 0 10000)
-
-test : Signal TestOutput
-test =
-  continuousCheck
-    [ prop_discontinuous
+suite_reverse =
+  suite "List Reverse Suite"
+    [ claim_reverse_twice_yields_original
+    , claim_reverse_does_not_modify_length
     ]
 
-
-main =
-  display <~ test
+result = quickCheck suite_reverse
 ```
 
-`continuousCheck` re-runs the test every second using the current time as a seed.
+`quickCheck` will take either a single claim or a suite of claims and will run 100 checks on each claim to attempt to disprove each claim. `quickCheck` will then return a descriptive result of the checks performed.
 
-So, if we wait enough time, we go from this output:
+You can then visualize these results using the `display` function:
 
-```
-discontinuous has passed 100 tests!
-```
-
-to this output:
-
-```
-discontinuous has failed with the following input: 1
+```elm
+main = display result
 ```
 
-Which is exactly what we wanted. Now, elm-check has found the bug even though
-it was a pretty precise and edge case bug. The reason elm-check has found it
-is because it ran several times using different seeds. This means that it has
-had a change to try a larger portion of the input space. The longer the test
-runs, the more input it tries. This means that if you run elm-check long enough
-(say, a minute or so), and find no bugs, then you can be quite confident on the
-strength and correctness of the properties you are testing.
+And, voila, in just a few lines of code, you have made two different claims about the `reverse` function and performed 200 checks and displayed the results.
+
+
+### Simple example
+
+Let us look at a very simple example to get a feel for how to use `elm-check`.
+
+Suppose we wanted to test that multiplication and division are inverse operations.
+
+You would make this claim as follows:
+
+```elm
+claim_multiplication_division_inverse =
+  claim
+    "Multiplication and division are inverse operations"
+  `that`
+    (\(x, y) -> x * y / y)
+  `is`
+    (\(x, y) -> x)
+  `for`
+    tuple (float, float)
+```
+
+Now, if you run `quickCheck` on this claim and displayed it in the browser with `display`, you would get:
+
+```
+Multiplication and division are inverse operations FAILED after 1 check!
+  - Counter example: (0,0)
+  - Actual: NaN
+  - Expected: 0
+```
+
+This result shows that `elm-check` has found a counter example, namely `(0,0)`
+which falsifies the claim. This is obviously true because division by 0 is undefined, hence the `NaN` value.
+
+We can solve this issue by adding this condition to our actual statement and modify it as follows:
+
+```elm
+claim_multiplication_division_inverse =
+  claim
+    "Multiplication and division are inverse operations"
+  `that`
+    (\(x, y) -> if y == 0 then x else x * y / y)
+  `is`
+    (\(x, y) -> x)
+  `for`
+    tuple (float, float)
+```
+
+So, we added the condition where if y is 0, we simply return x. Now, let's see
+what `elm-check` gives us now if we run `quickCheck`.
+
+```
+Multiplication and division are inverse operations FAILED after 1 check!
+  - Counter example: (0.0001073802195855836,0.00013967437556471545)
+  - Actual: 0.00010738021958558358
+  - Expected: 0.0001073802195855836
+```
+
+Uh-oh, a new counter example. So, we can see that the actual and the expected values are incredibly close. From their closeness we can easily infer that something went wrong in the rounding. This is exactly what has happened as this is a floating-point error.
+
+An interesting thing to note is that the counter example found was incredibly close to the original one of `(0,0)`. How come? The `float` investigator has the ability to generate any random float. So, what has happened here?
+
+Well, to do this let us look back at the original claim:
+
+```elm
+claim_multiplication_division_inverse =
+  claim
+    "Multiplication and division are inverse operations"
+  `that`
+    (\(x, y) -> x * y / y)
+  `is`
+    (\(x, y) -> x)
+  `for`
+    tuple (float, float)
+```
+
+And this time, instead of displaying the results with `display`, let us use the alternative `displayVerbose` function which gives more detail about the test results.
+
+Now, we get this output:
+
+```
+Multiplication and division are inverse operations FAILED after 1 check!
+  - Counter example: (0,0)
+  - Actual: NaN
+  - Expected: 0
+  - Seed: State 879767458 1052200661
+  - Number of shrinking operations performed: 4
+  - Before shrinking:
+    - Counter example: (-14.074540141521613,-18.307399754018384)
+    - Actual: -14.074540141521611
+    - Expected: -14.074540141521613
+```
+
+From here we can see that there are a "seed", a "number of shrinking operations performed" and a "before shrinking" fields. The "seed" is there in order to reproduce test results. The "shrinking" stuff relates to a feature that `elm-check` provides called "shrinking".
+
+Shrinking is the idea of shrinking a test case to a minimal representation. In this case, the investigator `tuple (float, float)` has found the original counter example `(-14.074540141521613,-18.307399754018384)`. It has then taken this counter example and has searched for another counter example that is more minimal that still disproves the claim. It has then repeated this process until it finds no more minimal counter example that still disproves the claim, in this case, simply `(0,0)`. Intuitively, `(0,0)` is as minimal an input as it gets. Having such minimal inputs is key to diagnosing problem.
+
+As we have seen, this simple claim has enabled us to diagnose two gotchas about division. Get used to this as it is very common for individual claims to encounter multiple problems with a system.
