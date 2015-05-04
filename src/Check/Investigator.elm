@@ -20,6 +20,7 @@ import Shrink exposing (Shrinker)
 import Random exposing (Generator)
 import Random.Extra as Random
 import Random.Bool
+import Random.Function
 import Random.Order
 import Random.Char
 import Random.String
@@ -226,6 +227,41 @@ tuple5 (invA, invB, invC, invD, invE) =
     (Random.zip5 invA.generator invB.generator invC.generator invD.generator invE.generator)
     (Shrink.tuple5 (invA.shrinker, invB.shrinker, invC.shrinker, invD.shrinker, invE.shrinker))
 
+
+{-| Investigator of functions. Takes an investigator for the return type
+and returns an investigator of functions. Uses the `func` generator from
+elm-random-extra and does not perform any shrinking.
+-}
+func : Investigator b -> Investigator (a -> b)
+func invB =
+  investigator
+    (Random.Function.func invB.generator)
+    (Shrink.noShrink)
+
+
+func2 : Investigator c -> Investigator (a -> b -> c)
+func2 invC =
+  investigator
+    (Random.Function.func2 invC.generator)
+    (Shrink.noShrink)
+
+func3 : Investigator d -> Investigator (a -> b -> c -> d)
+func3 invD =
+  investigator
+    (Random.Function.func3 invD.generator)
+    (Shrink.noShrink)
+
+func4 : Investigator e -> Investigator (a -> b -> c -> d -> e)
+func4 invE =
+  investigator
+    (Random.Function.func4 invE.generator)
+    (Shrink.noShrink)
+
+func5 : Investigator f -> Investigator (a -> b -> c -> d -> e -> f)
+func5 invF =
+  investigator
+    (Random.Function.func5 invF.generator)
+    (Shrink.noShrink)
 
 {-| Shrink a value from an Investigator generator.
 
