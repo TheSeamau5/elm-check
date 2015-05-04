@@ -360,7 +360,7 @@ An important thing to note about the DSL, these functions only work with `claim`
 
 ### Missing from previous versions
 
-Continuous checking is gone from this version. If you are using it, don't worry, it is getting replaced with a newer, shinier Task-based version. The goal here is to provide an means to capture the progression of a run of `elm-check` by running checks in tasks and sending the result to mailboxes. This will make continuous checking way more responsive than the previous Signal-based version which tended to perform terribly if the functions you were testing happened to be computationally intensive. So, watch this space and expect the browser runner to be dramatically improved as this feature is supported.
+Continuous checking is gone from this version. If you are using it, don't worry, it is getting replaced with a newer, shinier Task-based version. The goal here is to provide a means to capture the progression of a run of `elm-check` by running checks in tasks and sending the result to mailboxes. This will make continuous checking way more responsive than the previous Signal-based version which tended to perform terribly if the functions you were testing happened to be computationally intensive. So, watch this space and expect the browser runner to be dramatically improved as this feature is supported.
 
 
 # Elm-test integration
