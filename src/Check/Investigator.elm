@@ -12,7 +12,7 @@ migrating from local to cloud-based.
 @docs Investigator, investigator
 
 # Basic Investigator Generators
-@docs void, bool, order, int, float, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5
+@docs void, bool, order, int, float, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5, func, func2, func3, func4, func5
 
 -}
 import Array  exposing (Array)
