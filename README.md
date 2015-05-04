@@ -17,7 +17,7 @@ The way `elm-check` solves these problems is by
 
 # How it works
 
-`elm-check` is centered around the idea of `claims` and `investigator`. You make a claim of truth about your system and have an investigator check the claim.
+`elm-check` is centered around the idea of `claims` and `investigators`. You make a claim of truth about your system and have an investigator check the claim.
 
 For example, suppose you wanted to test a function to reverse a list of elements.
 
