@@ -1,420 +1,566 @@
-module Check
-  ( Property
-  , TestOutput
-  , property
-  , property2
-  , property3
-  , property4
-  , property5
-  , property6
-  , propertyN
-  , property2N
-  , property3N
-  , property4N
-  , property5N
-  , check
-  , simpleCheck
-  , continuousCheck
-  , continuousCheckEvery
-  , deepContinuousCheck
-  , deepContinuousCheckEvery
-  , print
-  , printVerbose
-  , display
-  , displayVerbose ) where
-{-| Library for doing property-based testing in Elm
+module Check where
+{-| Property Based Testing module in Elm.
 
-# Constructing properties
-@docs property, propertyN
+# Make a claim
+@docs claim, claimTrue, claimFalse
 
-# Checking the properties
-@docs check, simpleCheck
+# Check a claim
+@docs quickCheck, check
 
-# Continuously checking properties
-@docs continuousCheck, deepContinuousCheck, continuousCheckEvery, deepContinuousCheckEvery
+# Group claims into a suite
+@docs suite
 
-# Printing and displaying results
-@docs print, printVerbose, display, displayVerbose
+# Types
+@docs Claim, Evidence, UnitEvidence, SuccessOptions, FailureOptions
 
-# Properties for functions of multiple parameters
-@docs property2, property3, property4, property5, property6, property2N, property3N, property4N, property5N
+# Multi-arity claims
+@docs expectedStatement, claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
+
+# DSL
+
+`elm-check` provides a shorthand DSL for authoring claims. The goal of this
+DSL is to help improve readability and encode intent in the phrasing of your
+test code.
+
+With the DSL, claims read as either:
+
+1. claim - (string) - that - (actual) - is - (expected) - for - (investigator)
+2. claim - (string) - true - (predicate) - for - (investigator)
+3. claim - (string) - false - (predicate) - for - (investigator)
+
+
+**Example:**
+
+    claim_multiplication_by_one_noop =
+      claim
+        "Multiplying by one does not change a number"
+      `true`
+        (\n -> n * 1 == n)
+      `for`
+        int
+
+    claim_reverse_append =
+      claim
+        "Append then reverse is equivalent to reverse then append"
+      `that`
+        (\(l1, l2) -> List.reverse (l1 ++ l2))
+      `is`
+        (\(l1, l2) -> List.reverse l1 ++ List.reverse l2)
+      `for`
+        tuple (list int, list int)
+
+
+It is important to note that, if you wish to deal with multi-arity functions
+using this DSL, you must deal explicitly in tuples.
+
+*Warning: The DSL follows a very strict format. Deviating from this format will
+yield potentially unintelligible type errors. While not all of the type errors
+are strictly necessary, they are there to ensure that the test is authored in
+a uniform way. As a result, the following functions have horrendous type
+signatures and you are better off ignoring them.*
+
+@docs that, is, for, true, false
 
 -}
 
-import Random (Generator, list, generate, initialSeed, Seed, customGenerator)
-import List (map, map2, filter, length, head, (::))
-import Result (Result(..))
-import Time (every, second, Time)
-import Signal
-import String (join)
-import Graphics.Element (Element)
-import Text (leftAligned, monospace, fromString)
+--------------------------
+-- CORE LIBRARY IMPORTS --
+--------------------------
 
+import List
+import Random     exposing (Seed, Generator)
+import Trampoline exposing (Trampoline(..), trampoline)
 
-type alias Error =
+-------------------------
+-- THIRD PARTY IMPORTS --
+-------------------------
+
+import Random.Extra as Random
+
+-------------------
+-- LOCAL IMPORTS --
+-------------------
+
+import Check.Investigator  exposing (Investigator, tuple, tuple3, tuple4, tuple5)
+
+-----------
+-- TYPES --
+-----------
+
+{-| A Claim is an object that makes a claim of truth about a system.
+A claim is either a function which yields evidence regarding the claim
+or a list of such claims.
+-}
+type Claim
+  = Claim String (Int -> Seed -> Evidence)
+  | Suite String (List Claim)
+
+{-| Evidence is the output from checking a claim or multiple claims.
+-}
+type Evidence
+  = Unit UnitEvidence
+  | Multiple String (List Evidence)
+
+{-| UnitEvidence is the concrete type returned by checking a single claim.
+A UnitEvidence can easily be converted to an assertion or can be considered
+as the result of an assertion.
+-}
+type alias UnitEvidence =
+  Result FailureOptions SuccessOptions
+
+{-| SuccessOptions is the concrete type returned in case there is no evidence
+found disproving a Claim.
+
+SuccessOptions contains:
+1. the `name` of the claim
+2. the number of checks performed
+3. the `seed` used in order to reproduce the check.
+-}
+type alias SuccessOptions =
   { name : String
-  , value : String
   , seed : Seed
+  , numberOfChecks : Int
   }
 
-type alias Success =
+{-| FailureOptions is the concrete type returned in case evidence was found
+disproving a Claim.
+
+FailureOptions contains:
+1. the `name` of the claim
+2. the minimal `counterExample` which serves as evidence that the claim is false
+3. the value `expected` to be returned by the claim
+4. the `actual` value returned by the claim
+5. the `seed` used in order to reproduce the results
+6. the number of checks performed
+7. the number of shrinking operations performed
+8. the original `counterExample`, `actual`, and `expected` values found prior
+to performing the shrinking operations.
+-}
+type alias FailureOptions =
   { name : String
-  , value : String
+  , counterExample : String
+  , actual    : String
+  , expected  : String
+  , original  :
+    { counterExample  : String
+    , actual    : String
+    , expected  : String
+    }
   , seed : Seed
+  , numberOfChecks  : Int
+  , numberOfShrinks : Int
   }
 
-type alias TestResult = List (Result Error Success)
+{-}
+encode_failureOptions : FailureOptions -> Value
+encode_failureOptions options =
+  Encode.object
+    [ ("name", Encode.string options.name)
+    , ("counterExample", Encode.string options.counterExample)
+    , ("actual", Encode.string options.actual)
+    , ("expected", Encode.string options.expected)
+    , ("original",
+          Encode.object
+            [ ("counterExample", Encode.string options.original.counterExample)
+            , ("actual", Encode.string options.original.actual)
+            , ("expected", Encode.string options.original.expected)
+            ]
 
-type alias Property = (Seed) -> TestResult
+      )
+    , ("seed",
+        let (s0, s1) = case options.seed.state of
+              State s0 s1 -> (s0, s1)
+        in
+            Encode.list [Encode.int s0, Encode.int s1]
+      )
+    , ("numberOfChecks", Encode.int options.numberOfChecks)
+    , ("numberOfShrinks", Encode.int options.numberOfShrinks)
+    ]
+-}
+------------------
+-- MAKE A CLAIM --
+------------------
 
-type alias TestOutput = List TestResult
+{-| Make a claim about a system.
 
-mergeTestResult : Result Error Success -> Result Error Success -> Result Error Success
-mergeTestResult result1 result2 =
-  case result1 of
-    Err err1 -> Err err1
-    Ok ok1 ->
-      case result2 of
-        Err err2 -> Err err2
-        Ok ok2 -> Ok ok1
+    claim nameOfClaim actualStatement expectedStatement investigator
 
-mergeTestResults : TestResult -> TestResult -> TestResult
-mergeTestResults results1 results2 =
-  let errorResults =
-        filter
-          (\result ->
-            case result of
-              Ok _ -> False
-              Err _ -> True)
-          results1
-  in
-    case length errorResults of
-      0 ->
-        map2 mergeTestResult results1 results2
-      n ->
-        errorResults
-
-mergeTestOutputs : TestOutput -> TestOutput -> TestOutput
-mergeTestOutputs output1 output2 =
-  case output1 of
-    [] -> output2
-    x :: xs ->
-      case output2 of
-        [] -> output1
-        y :: ys ->
-          mergeTestResults x y :: mergeTestOutputs xs ys
-
-
-generateTestCases : Generator (List a) -> Seed -> (List a, Seed)
-generateTestCases listGenerator seed =
-  generate listGenerator seed
-
-test : String -> (a -> Bool) -> (List a, Seed) -> TestResult
-test name predicate (tests, seed) =
-  let testResults = map (\t -> (t, predicate t)) tests
-      toResult (t, value) =
-        case value of
-          True  -> Ok { name = name, value = toString t, seed = seed }
-          False -> Err { name = name, value = toString t, seed = seed }
-  in
-    map toResult testResults
+1. The `nameOfClaim` is a string you pass in order to name your claim.
+This is very useful when trying to debug or reading reports.
+2. The `actualStatement` is a function which states something about your
+system. The result of which will be compared by equality `==` to the
+result of the `expectedStatement`.
+3. The `expectedStatement` is a function which states something which
+the `actualStatement` should conform to or be equivalent to. The result of
+which will be compared by equality `==` to the result of the `actualStatement`.
+4. The `investigator` is an investigator used to generate random values to be passed
+to the `actualStatement` and `expectedStatement` in order to attempt to
+disprove the claim. If a counter example is found, the `investigator` will then
+shrink the counter example until it yields a minimal counter example which
+is then easy to debug.
 
 
-{-| Create a property given a number of test cases, a name, a condition to test and a generator
 Example :
 
-    doubleNegativeIsPositive =
-      propertyN 1000
-                "Double Negative is Positive"
-                (\number -> -(-number) == number)
-                (float -300 400)
+    claim_sort_idempotent =
+      claim "Sort is idempotent"
+        (\list -> List.sort (List.sort (list))
+        (\list -> List.sort (list))
+        (list int)
+
 -}
-propertyN : Int -> String -> (a -> Bool) -> Generator a -> Property
-propertyN numberOfTests name predicate generator =
-  \seed ->
-      let listGenerator = list numberOfTests generator -- listGenerator : Generator (List a)
-          testCases = generateTestCases listGenerator seed -- testCases : (List a, Seed)
-      in
-        test name predicate testCases
+claim : String -> (a -> b) -> (a -> b) -> Investigator a -> Claim
+claim name actualStatement expectedStatement investigator =
+-------------------------------------------------------------------
+-- QuickCheck Algorithm with Shrinking :
+-- 1. Find a counter example within a given number of checks
+-- 2. If there is no such counter example, return a success
+-- 3. Else, shrink the counter example to a minimal representation
+-- 4. Return a failure.
+-------------------------------------------------------------------
+  Claim name <|
+  -- A Claim is just a function that takes a number of checks
+  -- and a random seed and returns an `Evidence` object
+
+    \numberOfChecks seed ->
+    -- `numberOfChecks` is the given number of checks which is usually
+    -- passed in by the `check` function. This sets an upper bound on
+    -- the number of checks performed in order to find a counter example
+
+    -- `seed` is the random seed which is usually passed in by the `check`
+    -- function. Explictly passing random seeds allow the user to reproduce
+    -- checks in order to re-run old checks on newer, presumably less buggy,
+    -- code.
+
+      let
+          -- Find the original counter example. The original counter example
+          -- is the first counter example found that disproves the claim.
+          -- This counter example, if found, will later be shrunk into a more
+          -- minimal version, hence "original".
+
+          -- Note that since finding a counter example is a recursive process,
+          -- trampolines are used. `originalCounterExample'` returns a
+          -- trampoline.
+
+          -- originalCounterExample' : Seed -> Int -> Trampoline (Result (a, b, b, Seed, Int) Int)
+          originalCounterExample' seed currentNumberOfChecks =
+            if currentNumberOfChecks >= numberOfChecks
+            then
+              ------------------------------------------------------------------
+              -- Stopping Condition:
+              -- If we have checked the claim at least `numberOfChecks` times
+              -- Then we simple return `Ok` with the number of checks signifying
+              -- that we have failed to find a counter example.
+              ------------------------------------------------------------------
+              Done (Ok numberOfChecks)
+
+            else
+              let
+                  --------------------------------------------------------------
+                  -- Body of loop:
+                  -- 1. We generate a new random value and the next seed using
+                  --    the investigator's random generator and the previous seed.
+                  -- 2. We calculate the actual outcome and the expected
+                  --    outcome from the given `actualStatement` and
+                  --    `expectedStatement` respectively
+                  -- 3. We compare the actual and the expected
+                  -- 4. If actual equals expected, we continue the loop with
+                  --    the next seed and incrementing the current number of
+                  --    checks
+                  -- 5. Else, we have found our counter example.
+                  --------------------------------------------------------------
+                  (value, nextSeed) = Random.generate investigator.generator seed
+                  actual    = actualStatement value
+                  expected  = expectedStatement value
+              in
+                  if actual == expected
+                  then
+                    Continue (\() -> originalCounterExample' nextSeed (currentNumberOfChecks + 1))
+                  else
+                    Done (Err (value, actual, expected, nextSeed, currentNumberOfChecks + 1))
+
+          -- originalCounterExample : Result (a, b, b, Seed, Int) Int
+          originalCounterExample =
+            trampoline (originalCounterExample' seed 0)
+
+      in case originalCounterExample of
+        ------------------------------------------------------------
+        -- Case: No counter examples were found
+        -- We simply return the name of the claim, the seed, and the
+        -- number of checks performed.
+        ------------------------------------------------------------
+        Ok numberOfChecks -> Unit <|
+          Ok
+            { name = name
+            , seed = seed
+            , numberOfChecks = max 0 numberOfChecks
+            }
+
+        ------------------------------------------------------------
+        -- Case : A counter example was found
+        -- We proceed to shrink the counter example to a more minimal
+        -- representation which still disproves the claim.
+        ------------------------------------------------------------
+        Err (originalCounterExample, originalActual, originalExpected, seed, numberOfChecks) ->
+          let
+
+              ------------------------------------------------------------------
+              -- Find the minimal counter example:
+              -- 1. Given a counter example, we produce a list of values
+              --    considered more minimal (i.e. we shrink the counter example)
+              -- 2. We keep only the shrunken values that disprove the claim.
+              -- 3. If there are no such shrunken value, then we consider the
+              --    given counter example to be minimal and report the number
+              --    of shrinking operations performed.
+              -- 4. Else, we recurse, passing in the new shrunken value
+              --    and incrementing the current number of shrinks counter.
+              ------------------------------------------------------------------
+
+              -- Note that since finding the minimal counter example is a
+              -- recursive process, trampolines are used. `shrink` returns
+              -- a trampoline.
+
+              -- shrink : a -> Int -> Trampoline (a, Int)
+              shrink counterExample currentNumberOfShrinks =
+                let
+
+                    -- Produce a list of values considered more minimal that
+                    -- the given `counterExample`.
+
+                    -- shrunkenCounterExamples : List a
+                    shrunkenCounterExamples = investigator.shrinker counterExample
 
 
-{-| Analog of `propertyN` for functions of two arguments
+                    -- Keep only the counter examples that disprove the claim.
+                    -- (i.e. they violate `actual == expected`)
+
+                    -- failingShrunkenCounterExamples : List a
+                    failingShrunkenCounterExamples =
+                      List.filter (\shrunk ->
+                        not (actualStatement shrunk == expectedStatement shrunk)
+                      ) shrunkenCounterExamples
+
+                in case List.head failingShrunkenCounterExamples of
+                  Nothing ->
+                    --------------------------------------------------------
+                    -- Stopping Condition :
+                    -- If there are no further shrunken counter examples
+                    -- we simply return the given counter example and report
+                    -- the number of shrinking operations performed.
+                    --------------------------------------------------------
+                    Done (counterExample, currentNumberOfShrinks)
+
+                  Just failing ->
+                    --------------------------------------------------------
+                    -- Body of Loop :
+                    -- We simply recurse with the first shrunken counter
+                    -- example we can get our hands on and incrementing the
+                    -- current number of shrinking operations counter
+                    --------------------------------------------------------
+                    Continue (\() -> shrink failing (currentNumberOfShrinks + 1))
+
+              -- minimal : a
+              -- numberOfShrinks : Int
+              (minimal, numberOfShrinks) =
+                trampoline (shrink originalCounterExample 0)
+
+              -- actual : b
+              actual    = actualStatement minimal
+
+              -- expected : b
+              expected  = expectedStatement minimal
+
+          in
+
+            -- Here, we return an `Err` signifying that a counter example was
+            -- found. The returned record contains a number of fields and
+            -- values useful for diagnostics, such as the counter example,
+            -- the expected and the actual values, as well the original
+            -- unshrunk versions, the name of the claim, the seed used to
+            -- find the counter example, the number of checks performed to find
+            -- the counter example, and the number of shrinking operations
+            -- performed.
+
+            Unit <|
+              Err
+                { name = name
+                , seed = seed
+                , counterExample = toString minimal
+                , expected = toString expected
+                , actual = toString actual
+                , original =
+                  { counterExample = toString originalCounterExample
+                  , actual    = toString originalActual
+                  , expected  = toString originalExpected
+                  }
+                , numberOfChecks = numberOfChecks
+                , numberOfShrinks = numberOfShrinks
+                }
+
+
+{-| Make a claim of truth about a system.
+
+Similar to `claim`, `claimTrue` only considers claims which always yield `True`
+to be true. If `claimTrue` manages to find an input which causes the given
+predicate to yield `False`, then it will consider that as the counter example.
+
+    claimTrue nameOfClaim predicate investigator
+
+
+Example:
+
+    claim_length_list_nonnegative =
+      claimTrue "The length of a list is strictly non-negative"
+        (\list -> List.length list >= 0)
+        (list string)
 -}
-property2N : Int -> String -> (a -> b -> Bool) -> Generator a -> Generator b -> Property
-property2N numberOfTests name predicate generatorA generatorB =
-  propertyN numberOfTests name (\(a,b) -> predicate a b) (rZip generatorA generatorB)
+claimTrue : String -> (a -> Bool) -> Investigator a -> Claim
+claimTrue name predicate =
+  claim name predicate (always True)
 
-{-| Analog of `propertyN` for functions of three arguments
+
+{-| Make a claim of falsiness about a system.
+
+Analogous to `claimTrue`, `claimFalse` only considers claims which always yield
+`False` to be true. If `claimFalse` manages to find an input which causes the
+given predicate to yield `True`, then it will consider that as the counter
+example.
+
+    claimFalse nameOfClaim predicate investigator
+
+
+Example:
+
+    claim_length_list_never_negative =
+      claimFalse "The length of a list is never negative"
+      (\list -> List.length list < 0)
+      (list float)
 -}
-property3N : Int -> String -> (a -> b -> c -> Bool) -> Generator a -> Generator b -> Generator c -> Property
-property3N numberOfTests name predicate generatorA generatorB generatorC =
-  propertyN numberOfTests name (\(a,b,c) -> predicate a b c) (rZip3 generatorA generatorB generatorC)
+claimFalse : String -> (a -> Bool) -> Investigator a -> Claim
+claimFalse name predicate =
+  claim name predicate (always False)
 
-{-| Analog of `propertyN` for functions of four arguments
+
+-------------------
+-- CHECK A CLAIM --
+-------------------
+
+{-| Check a claim.
+
+To check a claim, you need to provide the number of checks which check will
+perform as well a random seed. Given a random seed and a number of checks,
+`check` will always yield the same result. Thus, `check` is especially useful
+when you wish to reproduce checks.
+
+    check claim numberOfChecks seed
 -}
-property4N : Int -> String -> (a -> b -> c -> d -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Property
-property4N numberOfTests name predicate generatorA generatorB generatorC generatorD =
-  propertyN numberOfTests name (\(a,b,c,d) -> predicate a b c d) (rZip4 generatorA generatorB generatorC generatorD)
+check : Claim -> Int -> Seed -> Evidence
+check claim n seed = case claim of
+  Claim name f ->
+    f n seed
+  Suite name claims ->
+    Multiple name (List.map (\c -> check c n seed) claims)
 
-{-| Analog of `propertyN` for functions of five arguments
+
+{-| Quick check a claim.
+
+This function is very useful when checking claims locally. `quickCheck` will
+perform 100 checks and use `Random.initialSeed 1` as the random seed.
+
+    quickCheck claim =
+      check claim 100 (Random.initialSeed 1)
 -}
-property5N : Int -> String -> (a -> b -> c -> d -> e -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Property
-property5N numberOfTests name predicate generatorA generatorB generatorC generatorD generatorE =
-  propertyN numberOfTests name (\(a,b,c,d,e) -> predicate a b c d e) (rZip5 generatorA generatorB generatorC generatorD generatorE)
+quickCheck : Claim -> Evidence
+quickCheck claim =
+  check claim 100 (Random.initialSeed 1)
 
 
+-------------------------------
+-- GROUP CLAIMS INTO A SUITE --
+-------------------------------
 
-{-| Create a property given a name, a condition to test and a generator
-Example :
+{-| Group a list of claims into a suite. This is very useful in order to
+group similar claims together.
 
-    doubleNegativeIsPositive =
-      property "Double Negative is Positive"
-               (\number -> -(-number) == number)
-               (float -300 400)
-Note : This property will create 100 test cases. If you want a different
-number, use `propertyN`
+    suite nameOfSuite listOfClaims
 -}
-property : String -> (a -> Bool) -> Generator a -> Property
-property = propertyN 100
-
-{-| Analog of `property` for functions of two arguments
-Example :
-
-    property2 "Bad Addition Subtraction Inverse"
-              (\a b -> (a - b - 1) == (a + (-b)))
-              (float 0 100) (float 0 100)
--}
-property2 : String -> (a -> b -> Bool) -> Generator a -> Generator b -> Property
-property2 name predicate generatorA generatorB =
-  property name (\(a,b) -> predicate a b) (rZip generatorA generatorB)
-
-{-| Analog of `property` for functions of three arguments
--}
-property3 : String -> (a -> b -> c -> Bool) -> Generator a -> Generator b -> Generator c -> Property
-property3 name predicate generatorA generatorB generatorC =
-  property name (\(a,b,c) -> predicate a b c) (rZip3 generatorA generatorB generatorC)
-
-{-| Analog of `property` for functions of four arguments
--}
-property4 : String -> (a -> b -> c -> d -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Property
-property4 name predicate generatorA generatorB generatorC generatorD =
-  property name (\(a,b,c,d) -> predicate a b c d) (rZip4 generatorA generatorB generatorC generatorD)
-
-{-| Analog of `property` for functions of five arguments
--}
-property5 : String -> (a -> b -> c -> d -> e -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Property
-property5 name predicate generatorA generatorB generatorC generatorD generatorE =
-  property name (\(a,b,c,d,e) -> predicate a b c d e) (rZip5 generatorA generatorB generatorC generatorD generatorE)
-
-{-| Analog of `property` for functions of six arguments
--}
-property6 : String -> (a -> b -> c -> d -> e -> f -> Bool) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Generator f -> Property
-property6 name predicate generatorA generatorB generatorC generatorD generatorE generatorF =
-  property name (\(a,b,c,d,e,f) -> predicate a b c d e f) (rZip6 generatorA generatorB generatorC generatorD generatorE generatorF)
+suite : String -> List Claim -> Claim
+suite name claims =
+  Suite name claims
 
 
-{-| Check a list of properties given a random seed.
+------------------------
+-- MULTI-ARITY CLAIMS --
+------------------------
 
-    check
-      [ prop_reverseReverseList
-      , prop_numberIsOdd
-      , prop_numberIsEqualToItself
-      ]
-      (initialSeed 1)
--}
-check : List Property -> Seed -> TestOutput
-check properties seed = map (\f -> f seed) properties
+claim2 : String -> (a -> b -> c) -> (a -> b -> c) -> Investigator a -> Investigator b -> Claim
+claim2 name actualStatement expectedStatement specA specB =
+  claim name (\(a, b) -> actualStatement a b) (\(a, b) -> expectedStatement a b) (tuple (specA, specB))
 
+claim2True : String -> (a -> b -> Bool) -> Investigator a -> Investigator b -> Claim
+claim2True name predicate =
+  claim2 name predicate (\_ _ -> True)
 
-{-| Version of check with a default initialSeed of 1
--}
-simpleCheck : List Property -> TestOutput
-simpleCheck properties =
-  check properties (initialSeed 1)
+claim2False : String -> (a -> b -> Bool) -> Investigator a -> Investigator b -> Claim
+claim2False name predicate =
+  claim2 name predicate (\_ _ -> False)
 
-{-| Version of check which continuously runs every second
-and uses the current time as its seed and merges test outputs.
--}
-continuousCheck : List Property -> Signal TestOutput
-continuousCheck =
-  continuousCheckEvery second
+claim3 : String -> (a -> b -> c -> d) -> (a -> b -> c -> d) -> Investigator a -> Investigator b -> Investigator c -> Claim
+claim3 name actualStatement expectedStatement specA specB specC =
+  claim name (\(a, b, c) -> actualStatement a b c) (\(a, b, c) -> expectedStatement a b c) (tuple3 (specA, specB, specC))
 
+claim3True : String -> (a -> b -> c -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Claim
+claim3True name predicate =
+  claim3 name predicate (\_ _ _ -> True)
 
-{-| Version of check which continuously runs every given time interval
-and uses the current time as its seed and merges test outputs.
+claim3False : String -> (a -> b -> c -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Claim
+claim3False name predicate =
+  claim3 name predicate (\_ _ _ -> False)
 
-    continuousCheck = continuousCheckEvery second
--}
-continuousCheckEvery : Time -> List Property -> Signal TestOutput
-continuousCheckEvery time properties =
-  Signal.foldp mergeTestOutputs []
-    (Signal.map ((check properties) << initialSeed << round) (every time))
+claim4 : String -> (a -> b -> c -> d -> e) -> (a -> b -> c -> d -> e) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
+claim4 name actualStatement expectedStatement specA specB specC specD =
+  claim name (\(a, b, c, d) -> actualStatement a b c d) (\(a, b, c, d) -> expectedStatement a b c d) (tuple4 (specA, specB, specC, specD))
 
+claim4True : String -> (a -> b -> c -> d -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
+claim4True name predicate =
+  claim4 name predicate (\_ _ _ _ -> True)
 
-{-| Version of check which continuously runs every second
-and uses the current time as its seed and accumulates all test outputs.
--}
-deepContinuousCheck : List Property -> Signal TestOutput
-deepContinuousCheck =
-  deepContinuousCheckEvery second
+claim4False : String -> (a -> b -> c -> d -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Claim
+claim4False name predicate =
+  claim4 name predicate (\_ _ _ _ -> False)
 
 
-{-| Version of check which continuously runs every given time interval
-and uses the current time as its seed and accumulates all test outputs.
--}
-deepContinuousCheckEvery : Time -> List Property -> Signal TestOutput
-deepContinuousCheckEvery time properties =
-  Signal.foldp (++) []
-    (Signal.map ((check properties) << initialSeed << round) (every time))
+claim5 : String -> (a -> b -> c -> d -> e -> f) -> (a -> b -> c -> d -> e -> f) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
+claim5 name actualStatement expectedStatement specA specB specC specD specE =
+  claim name (\(a, b, c, d, e) -> actualStatement a b c d e) (\(a, b, c, d, e) -> expectedStatement a b c d e) (tuple5 (specA, specB, specC, specD, specE))
 
-printWith : (List String -> String) -> TestResult -> String
-printWith flattener results =
-  let errorResults =
-        filter
-          (\result ->
-            case result of
-              Ok _ -> False
-              Err _ -> True)
-          results
-  in
-    if (length errorResults == 0)
-    then
-      case length results of
-        0 -> ""
-        n ->
-          case head results of
-            Ok {name} -> name ++ " has passed " ++ toString n ++ " tests!"
-            Err _ -> ""
-    else
-      (flattener
-        (map
-          (\result ->
-              case result of
-                Ok {name, value, seed} ->
-                  name ++ " has passed with the following input: " ++ value
-                Err {name, value, seed} ->
-                  name ++ " has failed with the following input: " ++ value)
-          errorResults))
+claim5True : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
+claim5True name predicate =
+  claim5 name predicate (\_ _ _ _ _ -> True)
 
-printOne : TestResult -> String
-printOne = printWith head
-
-printMany : TestResult -> String
-printMany = printWith (join "\n")
-
-{-| Print a test output as a string.
--}
-print : TestOutput -> String
-print results =
-  join "\n" (map printOne results)
-
-{-| Print a test output as a detailed string.
--}
-printVerbose : TestOutput -> String
-printVerbose results =
-  join "\n" (map printMany results)
-
-{-| Display a test output as an Element.
-Useful for viewing in the browser.
--}
-display : TestOutput -> Element
-display output =
-  let outputString = print output
-  in
-    leftAligned (monospace (fromString outputString))
-
-{-| Display a detailed test output as an Element.
-Useful for viewing in the browser.
--}
-displayVerbose : TestOutput -> Element
-displayVerbose output =
-  let outputString = printVerbose output
-  in
-    leftAligned (monospace (fromString outputString))
+claim5False : String -> (a -> b -> c -> d -> e -> Bool) -> Investigator a -> Investigator b -> Investigator c -> Investigator d -> Investigator e -> Claim
+claim5False name predicate =
+  claim5 name predicate (\_ _ _ _ _ -> False)
 
 
------- From elm-random-extra -------
---- The following functions are copied from elm-random-extra
---- In order to not depend explicity on elm-random-extra
---- Hopefully, these functions will be merged with the core random module
 
-rZip : Generator a -> Generator b -> Generator (a, b)
-rZip = rMap2 (,)
+---------
+-- DSL --
+---------
 
-rZip3 : Generator a -> Generator b -> Generator c -> Generator (a, b, c)
-rZip3 = rMap3 (,,)
+that : ((a -> b) -> (a -> b) -> Investigator a -> Claim) -> (a -> b) -> ((a -> b) -> Investigator a -> Claim)
+that f x = f x
 
-rZip4 : Generator a -> Generator b -> Generator c -> Generator d -> Generator (a, b, c, d)
-rZip4 = rMap4 (,,,)
+is : ((a -> b) -> Investigator a -> Claim) -> (a -> b) -> (Investigator a -> Claim)
+is f x = f x
 
-rZip5 : Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Generator (a, b, c, d, e)
-rZip5 = rMap5 (,,,,)
+for : (Investigator a -> Claim) -> Investigator a -> Claim
+for f x = f x
 
-rZip6 : Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Generator f -> Generator (a, b, c, d, e, f)
-rZip6 = rMap6 (,,,,,)
+true : ((a -> Bool) -> (a -> Bool) -> Investigator a -> Claim) -> (a -> Bool) -> (Investigator a -> Claim)
+true f pred =
+  f pred (always True)
 
-
-rMap : (a -> b) -> Generator a -> Generator b
-rMap f generator =
-  customGenerator
-    (\seed ->
-        let (value, nextSeed) = generate generator seed
-        in
-          (f value, nextSeed))
-
-rMap2 : (a -> b -> c) -> Generator a -> Generator b -> Generator c
-rMap2 f generatorA generatorB =
-  customGenerator
-    (\seed ->
-        let (valueA, seed1) = generate generatorA seed
-            (valueB, seed2) = generate generatorB seed1
-        in
-          (f valueA valueB, seed2))
-
-rMap3 : (a -> b -> c -> d) -> Generator a -> Generator b -> Generator c -> Generator d
-rMap3 f generatorA generatorB generatorC =
-  customGenerator
-    (\seed ->
-        let (valueA, seed1) = generate generatorA seed
-            (valueB, seed2) = generate generatorB seed1
-            (valueC, seed3) = generate generatorC seed2
-        in
-          (f valueA valueB valueC, seed3))
-
-rMap4 : (a -> b -> c -> d -> e) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e
-rMap4 f generatorA generatorB generatorC generatorD =
-  customGenerator
-    (\seed ->
-        let (valueA, seed1) = generate generatorA seed
-            (valueB, seed2) = generate generatorB seed1
-            (valueC, seed3) = generate generatorC seed2
-            (valueD, seed4) = generate generatorD seed3
-        in
-          (f valueA valueB valueC valueD, seed4))
-
-rMap5 : (a -> b -> c -> d -> e -> f) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Generator f
-rMap5 f generatorA generatorB generatorC generatorD generatorE =
-  customGenerator
-    (\seed ->
-        let (valueA, seed1) = generate generatorA seed
-            (valueB, seed2) = generate generatorB seed1
-            (valueC, seed3) = generate generatorC seed2
-            (valueD, seed4) = generate generatorD seed3
-            (valueE, seed5) = generate generatorE seed4
-        in
-          (f valueA valueB valueC valueD valueE, seed5))
-
-rMap6 : (a -> b -> c -> d -> e -> f -> g) -> Generator a -> Generator b -> Generator c -> Generator d -> Generator e -> Generator f -> Generator g
-rMap6 f generatorA generatorB generatorC generatorD generatorE generatorF =
-  customGenerator
-    (\seed ->
-        let (valueA, seed1) = generate generatorA seed
-            (valueB, seed2) = generate generatorB seed1
-            (valueC, seed3) = generate generatorC seed2
-            (valueD, seed4) = generate generatorD seed3
-            (valueE, seed5) = generate generatorE seed4
-            (valueF, seed6) = generate generatorF seed5
-        in
-          (f valueA valueB valueC valueD valueE valueF, seed6))
-
------------------------------------
+false : ((a -> Bool) -> (a -> Bool) -> Investigator a -> Claim) -> (a -> Bool) -> (Investigator a -> Claim)
+false f pred =
+  f pred (always False)

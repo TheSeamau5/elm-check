@@ -1,5 +1,5 @@
 {
-    "version": "2.0.3",
+    "version": "3.0.0",
     "summary": "Property-based testing in Elm",
     "repository": "https://github.com/TheSeamau5/elm-check.git",
     "license": "MIT",
@@ -7,9 +7,17 @@
         "src"
     ],
     "exposed-modules": [
-        "Check"
+        "Check",
+        "Check.Investigator",
+        "Check.Test",
+        "Check.Runner.Browser"
     ],
     "dependencies": {
-        "elm-lang/core": "1.1.0 <= v < 2.0.0"
-    }
+        "TheSeamau5/elm-random-extra": "2.1.0 <= v < 3.0.0",
+        "TheSeamau5/elm-shrink": "2.2.0 <= v < 3.0.0",
+        "deadfoxygrandpa/Elm-Test": "1.0.4 <= v < 2.0.0",
+        "elm-lang/core": "2.0.0 <= v < 3.0.0",
+        "evancz/elm-html": "3.0.0 <= v < 4.0.0"
+    },
+    "elm-version": "0.15.0 <= v < 0.16.0"
 }
