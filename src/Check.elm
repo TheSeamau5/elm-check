@@ -67,8 +67,6 @@ signatures and you are better off ignoring them.*
 -- CORE LIBRARY IMPORTS --
 --------------------------
 
-import Json.Decode as Decode exposing (Decoder)
-import Json.Encode as Encode exposing (Value)
 import List
 import Random     exposing (Seed, Generator)
 import Signal     exposing (Address, Mailbox, mailbox, send)
