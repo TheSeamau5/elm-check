@@ -80,7 +80,6 @@ import Trampoline exposing (Trampoline(..), trampoline)
 -------------------------
 
 import Random.Extra as Random
-import TaskTutorial exposing (getCurrentTime)
 
 -------------------
 -- LOCAL IMPORTS --
