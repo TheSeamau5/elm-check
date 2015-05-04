@@ -69,8 +69,6 @@ signatures and you are better off ignoring them.*
 
 import List
 import Random     exposing (Seed, Generator)
-import Signal     exposing (Address, Mailbox, mailbox, send)
-import Task       exposing (Task)
 import Trampoline exposing (Trampoline(..), trampoline)
 
 -------------------------
