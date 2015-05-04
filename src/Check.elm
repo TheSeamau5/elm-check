@@ -14,7 +14,7 @@ module Check where
 @docs Claim, Evidence, UnitEvidence, SuccessOptions, FailureOptions
 
 # Multi-arity claims
-@docs expectedStatement, claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
+@docs claim2True, claim2False, claim3, claim3True, claim3False, claim4, claim4True, claim4False, claim5, claim5True, claim5False
 
 # DSL
 
