@@ -452,7 +452,7 @@ perform as well a random seed. Given a random seed and a number of checks,
 `check` will always yield the same result. Thus, `check` is especially useful
 when you wish to reproduce checks.
 
-    check claim numberOfChecks seed
+    check claim 100 (Random.initialSeed 1)
 -}
 check : Claim -> Int -> Seed -> Evidence
 check claim n seed = case claim of
