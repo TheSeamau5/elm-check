@@ -114,8 +114,8 @@ percentage =
   let generator =
         Random.frequency
           [ (3, Random.float 0 1)
-          , (1, Random.float 0 0)
-          , (1, Random.float 1 1)
+          , (1, Random.constant 0)
+          , (1, Random.constant 1)
           ] (Random.float 0 1)
   in
       investigator (Random.float 0 1) Shrink.float
