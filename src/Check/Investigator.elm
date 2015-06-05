@@ -12,7 +12,7 @@ migrating from local to cloud-based.
 @docs Investigator, investigator
 
 # Basic Investigator Generators
-@docs void, bool, order, int, float, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5, func, func2, func3, func4, func5
+@docs void, bool, order, int, float, percentage, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5, func, func2, func3, func4, func5
 
 -}
 import Array  exposing (Array)
@@ -118,7 +118,7 @@ percentage =
           , (1, Random.constant 1)
           ] (Random.float 0 1)
   in
-      investigator (Random.float 0 1) Shrink.float
+      investigator generator Shrink.float
 
 
 {-| Investigator char. Generates random ascii chars using the `ascii` generator
