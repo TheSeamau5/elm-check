@@ -104,6 +104,23 @@ float =
   in
       investigator (Random.float -50 50) Shrink.float
 
+
+{-| Investigator percentage. Generates random floats between 0.0 and 1.0 and the `float`
+shrinker from elm-shrink. Useful in conjunction with `tuple` to facilitate
+things like generating an array and then selecting one of its elements at random.
+-}
+percentage : Investigator Float
+percentage =
+  let generator =
+        Random.frequency
+          [ (3, Random.float 0 1)
+          , (1, Random.constant 0)
+          , (1, Random.constant 1)
+          ] (Random.float 0 1)
+  in
+      investigator (Random.float 0 1) Shrink.float
+
+
 {-| Investigator char. Generates random ascii chars using the `ascii` generator
 from elm-random-extra and the `char` shrinker from elm-shrink. Ideal for local
 testing or if your domain deals exclusively with ascii.
