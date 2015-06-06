@@ -140,6 +140,19 @@ char : Investigator Char
 char =
   investigator (Random.Char.char 32 127) Shrink.character
 
+{-| Investigator char. Generates random ascii chars using the `upperCaseLatin`
+generator from elm-random-extra and the `character` shrinker from elm-shrink.
+-}
+upperCaseChar : Investigator Char
+upperCaseChar =
+  investigator Random.Char.upperCaseLatin Shrink.character
+
+{-| Investigator char. Generates random ascii chars using the `lowerCaseLatin`
+generator from elm-random-extra and the `character` shrinker from elm-shrink.
+-}
+lowerCaseChar : Investigator Char
+lowerCaseChar =
+  investigator Random.Char.lowerCaseLatin Shrink.character
 
 {-| Investigator char. Generates a random UTF-8 character using the
 `unicode` generator from elm-random-extra and the `char` shrinker from
