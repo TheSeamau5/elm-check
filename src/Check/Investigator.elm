@@ -324,9 +324,14 @@ int =
 
 {-|
 -}
-positiveInt : Investigator Int
-positiveInt =
+nonNegative : Investigator Int
+nonNegative =
   rangeInt 1 (Random.maxInt)
+
+sized : (Int -> Investigator a) -> Investigator a
+sized constructor =
+  nonNegative
+    `andThen` \n -> constructor n
 
 {-| Investigator int constructor. Generates random ints between a given `min`
 and a given `max` value.
@@ -435,28 +440,33 @@ result errorInvestigator successInvestigator =
   merge (map Err errorInvestigator) (map Ok successInvestigator)
 
 
---list : Investigator a -> Investigator (List a)
---list investigator =
-
-
-
-
-{-}
 lazylist : Investigator a -> Investigator (LazyList a)
 lazylist investigator =
-  let
-      shrinkList l =
-        let
-            n =
-              Lazy.List.length l
+    nonNegative
+      `andThen` \x -> rangeInt 0 x
+      `andThen` \size -> replicateM size investigator
+      `Random.andThen` \roses -> Random.constant (shrinkLazyList roses)
 
-            shrinkOne l = lazy <| \() ->
-              case force l of
-                Lazy.List.Nil ->
-                  force Lazy.List.empty
 
-                Lazy.List.
--}
+list : Investigator a -> Investigator (List a)
+list investigator =
+  investigator
+  |> lazylist
+  |> map Lazy.List.toList
+
+array : Investigator a -> Investigator (Array a)
+array investigator =
+  investigator
+  |> lazylist
+  |> map Lazy.List.toArray
+
+
+
+
+
+
+
+
 {-}
 {-| Investigator list constructor. Generates random lists of values of size
 between 0 and 10 from a given investigator generator using the `rangeLengthList`
@@ -586,3 +596,92 @@ vector =
       investigator generator shrinker
 -}
 -}
+
+
+-------------
+-- HELPERS --
+-------------
+
+shrinkLazyList : LazyList (RoseTree a) -> RoseTree (LazyList a)
+shrinkLazyList trees =
+  let
+      roots =
+        Lazy.List.map RoseTree.root trees
+
+      children =
+        trees
+        |> removeRoses
+        |> Lazy.List.map shrinkLazyList
+
+  in
+      Rose roots children
+
+toN : Int -> LazyList Int
+toN n =
+  if
+    n < 0
+  then
+    Lazy.List.empty
+  else
+    natural
+    |> Lazy.List.take (n + 1)
+
+
+natural : LazyList Int
+natural =
+  Lazy.List.iterate ((+) 1) 0
+
+
+removeRoses : LazyList (RoseTree a) -> LazyList (LazyList (RoseTree a))
+removeRoses trees =
+  Lazy.List.map (flip excludeNth trees) (toN (Lazy.List.length trees - 1))
+  +++ rosePermutations trees
+
+excludeNth : Int -> LazyList a -> LazyList a
+excludeNth n list =
+  Lazy.List.take n list +++ Lazy.List.drop (n - 1) list
+
+rosePermutations : LazyList (RoseTree a) -> LazyList (LazyList (RoseTree a))
+rosePermutations trees =
+  Lazy.List.zip trees natural
+    `Lazy.List.andThen` \(rose, index) -> RoseTree.children rose
+    `Lazy.List.andThen` \child -> Lazy.List.singleton (update index child trees)
+
+
+
+
+
+update : Int -> a -> LazyList a -> LazyList a
+update n x list =
+  let
+      (first, rest) =
+        splitAt n list
+
+      newRest =
+        case force list of
+          Lazy.List.Nil ->
+            x ::: Lazy.List.empty
+
+          Lazy.List.Cons _ xs ->
+            x ::: xs
+
+  in
+      first +++ newRest
+
+
+
+
+splitAt : Int -> LazyList a -> (LazyList a, LazyList a)
+splitAt n list =
+  (Lazy.List.take n list, Lazy.List.drop n list)
+
+
+replicateM : Int -> Generator a -> Generator (LazyList a)
+replicateM m generator =
+  if m <= 0
+  then
+    Random.constant Lazy.List.empty
+  else
+    generator
+      `Random.andThen` \a -> replicateM (m - 1) generator
+      `Random.andThen` \l -> Random.constant (a ::: l)
