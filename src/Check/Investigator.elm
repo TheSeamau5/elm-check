@@ -39,6 +39,8 @@ module Check.Investigator
   , lazylist
   , list
   , array
+  , dict
+  , set
   , tuple
   , tuple3
   , tuple4
@@ -65,7 +67,7 @@ migrating from local to cloud-based.
 @docs investigator , constant , fromGenerator , applyShrinker
 
 # Common Investigators
-@docs void , bool , order , int , nonNegativeInt , sized , rangeInt , float , percentage , ascii , char , upperCaseChar , lowerCaseChar , unicode , string , maybe , result , lazylist , list , array , tuple , tuple3 , tuple4 , tuple5 , func , func2 , func3 , func4 , func5
+@docs void , bool , order , int , nonNegativeInt , sized , rangeInt , float , percentage , ascii , char , upperCaseChar , lowerCaseChar , unicode , string , maybe , result , lazylist , list , array , dict, set, tuple , tuple3 , tuple4 , tuple5 , func , func2 , func3 , func4 , func5
 
 # Common operations
 @docs merge , frequency , oneOf
@@ -73,12 +75,14 @@ migrating from local to cloud-based.
 # Functional operations
 @docs map , map2 , andMap , map3 , map4 , map5 , zip , zip3 , zip4 , zip5 , flatMap , andThen
 -}
-import RoseTree exposing (RoseTree(..))
-import Lazy exposing (Lazy, lazy, force)
-import Lazy.List exposing (LazyList, (:::), (+++))
-import Array  exposing (Array)
-import Shrink exposing (Shrinker)
-import Random exposing (Generator)
+import RoseTree   exposing (RoseTree(..))
+import Lazy       exposing (Lazy, lazy, force)
+import Lazy.List  exposing (LazyList, (:::), (+++))
+import Array      exposing (Array)
+import Dict       exposing (Dict)
+import Set        exposing (Set)
+import Shrink     exposing (Shrinker)
+import Random     exposing (Generator)
 import Random.Extra as Random
 import Random.Bool
 import Random.Function
@@ -149,8 +153,6 @@ flatMap f investigator =
 andThen : Investigator a -> (a -> Investigator b) -> Investigator b
 andThen =
   flip flatMap
-
-
 
 
 {-| Map a function over an investigator.
@@ -413,6 +415,25 @@ list investigator =
   investigator
   |> lazylist
   |> map Lazy.List.toList
+
+
+{-| Dict Investigator constructor.
+Generates random dicts from a given investigator.
+-}
+dict : Investigator comparable -> Investigator value -> Investigator (Dict comparable value)
+dict invKeys invValues =
+  list (tuple (invKeys, invValues))
+  |> map Dict.fromList
+
+
+{-| Set Investigator constructor.
+Generates random sets from a given investigator.
+-}
+set : Investigator comparable -> Investigator (Set comparable)
+set investigator =
+  investigator
+  |> list
+  |> map Set.fromList
 
 {-| Array Investigator constructor.
 Generates random arrays from a given investigator.
