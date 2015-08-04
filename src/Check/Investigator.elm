@@ -23,7 +23,7 @@ module Check.Investigator
   , bool
   , order
   , int
-  , nonNegative
+  , nonNegativeInt
   , sized
   , rangeInt
   , float
@@ -59,7 +59,19 @@ service. Consider making your own, more general investigator generators when
 migrating from local to cloud-based.
 
 # Investigator Definition
-@docs Investigator , constant , fromGenerator , applyShrinker , investigator , flatMap , andThen , map , map2 , andMap , map3 , map4 , map5 , zip , zip3 , zip4 , zip5 , merge , frequency , oneOf , void , bool , order , int , nonNegative , sized , rangeInt , float , percentage , ascii , char , upperCaseChar , lowerCaseChar , unicode , string , maybe , result , lazylist , list , array , tuple , tuple3 , tuple4 , tuple5 , func , func2 , func3 , func4 , func5
+@docs Investigator
+
+# Construct Investigators
+@docs investigator , constant , fromGenerator , applyShrinker
+
+# Common Investigators
+@docs void , bool , order , int , nonNegativeInt , sized , rangeInt , float , percentage , ascii , char , upperCaseChar , lowerCaseChar , unicode , string , maybe , result , lazylist , list , array , tuple , tuple3 , tuple4 , tuple5 , func , func2 , func3 , func4 , func5
+
+# Common operations
+@docs merge , frequency , oneOf
+
+# Functional operations
+@docs map , map2 , andMap , map3 , map4 , map5 , zip , zip3 , zip4 , zip5 , flatMap , andThen
 -}
 import RoseTree exposing (RoseTree(..))
 import Lazy exposing (Lazy, lazy, force)
@@ -269,8 +281,8 @@ int =
 
 {-| Generate non-negative integers.
 -}
-nonNegative : Investigator Int
-nonNegative =
+nonNegativeInt : Investigator Int
+nonNegativeInt =
   rangeInt 0 (Random.maxInt)
 
 
@@ -279,7 +291,7 @@ size parameter.
 -}
 sized : (Int -> Investigator a) -> Investigator a
 sized constructor =
-  nonNegative
+  nonNegativeInt
     `andThen` \n -> constructor n
 
 {-| Investigator int constructor. Generates random ints between a given `min`
@@ -387,7 +399,7 @@ Generates random lazy lists from a given investigator.
 -}
 lazylist : Investigator a -> Investigator (LazyList a)
 lazylist investigator =
-    nonNegative
+    nonNegativeInt
       `andThen` \x -> rangeInt 0 x
       `andThen` \size -> replicateM size investigator
       `Random.andThen` \roses -> Random.constant (shrinkLazyList roses)
