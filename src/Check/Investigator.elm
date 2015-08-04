@@ -346,13 +346,7 @@ shrinker from elm-shrink. Ideal for local testing.
 -}
 float : Investigator Float
 float =
-  let generator =
-        Random.frequency
-          [ (3, Random.float -50 50)
-          , (1, Random.float (toFloat Random.minInt) (toFloat Random.maxInt))
-          ] (Random.float -50 50)
-  in
-      investigator (Random.float -50 50) Shrink.float
+  investigator (Random.float -50 50) Shrink.float
 
 
 {-| Investigator percentage. Generates random floats between 0.0 and 1.0 and the `float`
