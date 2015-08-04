@@ -1,4 +1,54 @@
-module Check.Investigator where
+module Check.Investigator
+  ( Investigator
+  , investigator
+  , constant
+  , fromGenerator
+  , applyShrinker
+  , flatMap
+  , andThen
+  , map
+  , map2
+  , andMap
+  , map3
+  , map4
+  , map5
+  , zip
+  , zip3
+  , zip4
+  , zip5
+  , merge
+  , frequency
+  , oneOf
+  , void
+  , bool
+  , order
+  , int
+  , nonNegative
+  , sized
+  , rangeInt
+  , float
+  , percentage
+  , ascii
+  , char
+  , upperCaseChar
+  , lowerCaseChar
+  , unicode
+  , string
+  , maybe
+  , result
+  , lazylist
+  , list
+  , array
+  , tuple
+  , tuple3
+  , tuple4
+  , tuple5
+  , func
+  , func2
+  , func3
+  , func4
+  , func5
+  ) where
 {-| Sub-module containing the Investigator type used by elm-check.
 
 This sub-module contains several predefined investigator generators and means of
@@ -9,11 +59,7 @@ service. Consider making your own, more general investigator generators when
 migrating from local to cloud-based.
 
 # Investigator Definition
-@docs Investigator, investigator
-
-# Basic Investigator Generators
-docs void, bool, order, int, float, percentage, char, ascii, unicode, string, maybe, result, list, array, tuple, tuple3, tuple4, tuple5, func, func2, func3, func4, func5
-
+@docs Investigator , constant , fromGenerator , applyShrinker , investigator , flatMap , andThen , map , map2 , andMap , map3 , map4 , map5 , zip , zip3 , zip4 , zip5 , merge , frequency , oneOf , void , bool , order , int , nonNegative , sized , rangeInt , float , percentage , ascii , char , upperCaseChar , lowerCaseChar , unicode , string , maybe , result , lazylist , list , array , tuple , tuple3 , tuple4 , tuple5 , func , func2 , func3 , func4 , func5
 -}
 import RoseTree exposing (RoseTree(..))
 import Lazy exposing (Lazy, lazy, force)
@@ -32,26 +78,12 @@ import Random.Result
 import Random.List
 import Random.Array
 
-flattenGenerator : Generator (Generator a) -> Generator a
-flattenGenerator genOfGens =
-  Random.customGenerator <|
-    \seed ->
-        let
-            (gen, seed2) = Random.generate genOfGens seed
-            (value, seed3) = Random.generate gen seed2
-        in
-            (value, seed3)
+
 
 {-| An Investigator is a Random Generator that generates values along with
 their corresponding shrink trees.
 -}
 type alias Investigator a = Generator (RoseTree a)
-
-{-| Create a shrink tree from a shrinker and a value.
--}
-shrinkTree : Shrinker a -> a -> RoseTree a
-shrinkTree shrink a =
-  Rose a (Lazy.List.map (shrinkTree shrink) (shrink a))
 
 {-| Investigator constructor. Construct an Investigator from a generator and
 a shrinker.
@@ -59,68 +91,6 @@ a shrinker.
 investigator : Generator a -> Shrinker a -> Investigator a
 investigator generator shrink =
   Random.map (shrinkTree shrink) generator
-
-
-{-| Turn a tree of generators into a generator of trees.
--}
-unwind : RoseTree (Generator a) -> Generator (RoseTree a)
-unwind treeOfGenerators =
-  Random.customGenerator <|
-    \seed ->
-      let
-          (values, seeds) = unzipTree <|
-            RoseTree.map (\gen -> Random.generate gen seed) treeOfGenerators
-
-          seed2 =
-            RoseTree.root seeds
-
-      in
-          (values, seed2)
-
-{-}
-unwindList : List (RoseTree a) -> RoseTree (List a)
-unwindList trees =
-  let
-      -- List a
-      roots =
-        List.map RoseTree.root trees
-
-      -- List (LazyList (RoseTree a))
-      children =
--}
-
-unwindLazyList : LazyList (RoseTree a) -> RoseTree (LazyList a)
-unwindLazyList trees =
-  let
-      -- LazyList a
-      roots =
-        Lazy.List.map RoseTree.root trees
-
-      -- LazyList (LazyList (RoseTree a))
-      children =
-        Lazy.List.map RoseTree.children trees
-
-      -- LazyList (RoseTree (LazyList a))
-      unwoundChildren =
-        Lazy.List.map unwindLazyList children
-
-  in
-      Rose roots unwoundChildren
-
-unwindList : List (RoseTree a) -> RoseTree (List a)
-unwindList trees =
-  trees
-  |> Lazy.List.fromList
-  |> unwindLazyList
-  |> RoseTree.map Lazy.List.toList
-
-
-unwindArray : Array (RoseTree a) -> RoseTree (Array a)
-unwindArray trees =
-  trees
-  |> Lazy.List.fromArray
-  |> unwindLazyList
-  |> RoseTree.map Lazy.List.toArray
 
 
 {-| Create an investigator from a constant value that does not shrink.
@@ -141,14 +111,8 @@ applyShrinker : Shrinker a -> Investigator a -> Investigator a
 applyShrinker shrink investigator =
   Random.map (RoseTree.root >> shrinkTree shrink) investigator
 
---applyShrinkerConstructor : (Shrinker a -> Shrinker b) -> Investigator a -> Investigator b
---applyShrinkerConstructor constructor investigator =
-
-getChildrenRoots : RoseTree a -> LazyList a
-getChildrenRoots =
-  RoseTree.children >> Lazy.List.map RoseTree.root
-
-
+{-| Map a function that creates an investigator onto an investigator.
+-}
 flatMap : (a -> Investigator b) -> Investigator a -> Investigator b
 flatMap f investigator =
   Random.customGenerator <|
@@ -168,26 +132,13 @@ flatMap f investigator =
       in
           Random.generate generatorOfTrees seed2
 
+{-| Chain investigator constructors.
+-}
 andThen : Investigator a -> (a -> Investigator b) -> Investigator b
 andThen =
   flip flatMap
 
 
-unzipTree : RoseTree (a, b) -> (RoseTree a, RoseTree b)
-unzipTree (Rose (x, y) children) =
-  let
-      (xs, ys) = unzipList <|
-        Lazy.List.map unzipTree children
-  in
-      (Rose x xs, Rose y ys)
-
-unzipList : LazyList (a, b) -> (LazyList a, LazyList b)
-unzipList list =
-  let
-      step (x,y) (xs, ys) =
-        (x ::: xs, y ::: ys)
-  in
-      Lazy.List.reduce step (Lazy.List.empty, Lazy.List.empty) list
 
 
 {-| Map a function over an investigator.
@@ -314,20 +265,18 @@ shrinker from elm-shrink. Ideal for local testing.
 -}
 int : Investigator Int
 int =
-  let generator =
-        Random.frequency
-          [ (3, Random.int -50 50)
-          , (1, Random.int Random.minInt Random.maxInt)
-          ] (Random.int -50 50)
-  in
-      investigator generator Shrink.int
+  investigator (Random.int -50 50) Shrink.int
 
-{-|
+{-| Generate non-negative integers.
 -}
 nonNegative : Investigator Int
 nonNegative =
-  rangeInt 1 (Random.maxInt)
+  rangeInt 0 (Random.maxInt)
 
+
+{-| Create an investigator from an investigator creator that depends on a
+size parameter.
+-}
 sized : (Int -> Investigator a) -> Investigator a
 sized constructor =
   nonNegative
@@ -417,23 +366,25 @@ string =
     (Shrink.string)
 
 
-{-| Investigator maybe constructor.
-Generates random maybe values from a given investigator generator.
+{-| Maybe Investigator constructor.
+Generates random maybe values from a given investigator.
 -}
 maybe : Investigator a -> Investigator (Maybe a)
 maybe investigator =
   merge (map Just investigator) (constant Nothing)
 
 
-{-| Investigator result constructor. Generates random result values from a given
-investigator generator using the `result` generator constructor from
-elm-random-extra and the `result` shrinker constrctor from elm-shrink.
+{-| Result Investigator constructor.
+Generates random result values from a given investigator.
 -}
 result : Investigator error -> Investigator value -> Investigator (Result error value)
 result errorInvestigator successInvestigator =
   merge (map Err errorInvestigator) (map Ok successInvestigator)
 
 
+{-| Lazy List Investigator constructor.
+Generates random lazy lists from a given investigator.
+-}
 lazylist : Investigator a -> Investigator (LazyList a)
 lazylist investigator =
     nonNegative
@@ -442,12 +393,18 @@ lazylist investigator =
       `Random.andThen` \roses -> Random.constant (shrinkLazyList roses)
 
 
+{-| List Investigator constructor.
+Generates random lists from a given investigator.
+-}
 list : Investigator a -> Investigator (List a)
 list investigator =
   investigator
   |> lazylist
   |> map Lazy.List.toList
 
+{-| Array Investigator constructor.
+Generates random arrays from a given investigator.
+-}
 array : Investigator a -> Investigator (Array a)
 array investigator =
   investigator
@@ -455,13 +412,15 @@ array investigator =
   |> map Lazy.List.toArray
 
 
-
+{-| Generate an investigator of tuples from a tuple of investigators.
+-}
 tuple : (Investigator a, Investigator b) -> Investigator (a, b)
 tuple (invA, invB) =
   invA
     `andThen` \a -> invB
     `andThen` \b -> constant (a, b)
 
+{-|-}
 tuple3 : (Investigator a, Investigator b, Investigator c) -> Investigator (a, b, c)
 tuple3 (invA, invB, invC) =
   invA
@@ -470,6 +429,7 @@ tuple3 (invA, invB, invC) =
     `andThen` \c -> constant (a, b, c)
 
 
+{-|-}
 tuple4 : (Investigator a, Investigator b, Investigator c, Investigator d) -> Investigator (a, b, c, d)
 tuple4 (invA, invB, invC, invD) =
   invA
@@ -479,6 +439,7 @@ tuple4 (invA, invB, invC, invD) =
     `andThen` \d -> constant (a, b, c, d)
 
 
+{-|-}
 tuple5 : (Investigator a, Investigator b, Investigator c, Investigator d, Investigator e) -> Investigator (a, b, c, d, e)
 tuple5 (invA, invB, invC, invD, invE) =
   invA
@@ -488,22 +449,29 @@ tuple5 (invA, invB, invC, invD, invE) =
     `andThen` \d -> invE
     `andThen` \e -> constant (a, b, c, d, e)
 
+{-| Generate a random constant function from a given investigator representing
+then output.
+-}
 func : Investigator b -> Investigator (a -> b)
 func investigator =
   map always investigator
 
+{-|-}
 func2 : Investigator c -> Investigator (a -> b -> c)
 func2 investigator =
   map always (func investigator)
 
+{-|-}
 func3 : Investigator d -> Investigator (a -> b -> c -> d)
 func3 investigator =
   map always (func2 investigator)
 
+{-|-}
 func4 : Investigator e -> Investigator (a -> b -> c -> d -> e)
 func4 investigator =
   map always (func3 investigator)
 
+{-|-}
 func5 : Investigator f -> Investigator (a -> b -> c -> d -> e -> f)
 func5 investigator =
   map always (func4 investigator)
@@ -595,3 +563,85 @@ replicateM m generator =
     generator
       `Random.andThen` \a -> replicateM (m - 1) generator
       `Random.andThen` \l -> Random.constant (a ::: l)
+
+
+unzipTree : RoseTree (a, b) -> (RoseTree a, RoseTree b)
+unzipTree (Rose (x, y) children) =
+  let
+      (xs, ys) = unzipList <|
+        Lazy.List.map unzipTree children
+  in
+      (Rose x xs, Rose y ys)
+
+unzipList : LazyList (a, b) -> (LazyList a, LazyList b)
+unzipList list =
+  let
+      step (x,y) (xs, ys) =
+        (x ::: xs, y ::: ys)
+  in
+      Lazy.List.reduce step (Lazy.List.empty, Lazy.List.empty) list
+
+unwindLazyList : LazyList (RoseTree a) -> RoseTree (LazyList a)
+unwindLazyList trees =
+  let
+      -- LazyList a
+      roots =
+        Lazy.List.map RoseTree.root trees
+
+      -- LazyList (LazyList (RoseTree a))
+      children =
+        Lazy.List.map RoseTree.children trees
+
+      -- LazyList (RoseTree (LazyList a))
+      unwoundChildren =
+        Lazy.List.map unwindLazyList children
+
+  in
+      Rose roots unwoundChildren
+
+unwindList : List (RoseTree a) -> RoseTree (List a)
+unwindList trees =
+  trees
+  |> Lazy.List.fromList
+  |> unwindLazyList
+  |> RoseTree.map Lazy.List.toList
+
+
+unwindArray : Array (RoseTree a) -> RoseTree (Array a)
+unwindArray trees =
+  trees
+  |> Lazy.List.fromArray
+  |> unwindLazyList
+  |> RoseTree.map Lazy.List.toArray
+
+{- Turn a tree of generators into a generator of trees.
+-}
+unwind : RoseTree (Generator a) -> Generator (RoseTree a)
+unwind treeOfGenerators =
+  Random.customGenerator <|
+    \seed ->
+      let
+          (values, seeds) = unzipTree <|
+            RoseTree.map (\gen -> Random.generate gen seed) treeOfGenerators
+
+          seed2 =
+            RoseTree.root seeds
+
+      in
+          (values, seed2)
+
+flattenGenerator : Generator (Generator a) -> Generator a
+flattenGenerator genOfGens =
+  Random.customGenerator <|
+    \seed ->
+        let
+            (gen, seed2) = Random.generate genOfGens seed
+            (value, seed3) = Random.generate gen seed2
+        in
+            (value, seed3)
+
+{- Create a shrink tree from a shrinker and a value.
+-}
+shrinkTree : Shrinker a -> a -> RoseTree a
+shrinkTree shrink a =
+  Rose a (Lazy.List.map (shrinkTree shrink) (shrink a))
