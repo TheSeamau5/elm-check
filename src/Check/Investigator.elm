@@ -462,141 +462,57 @@ array investigator =
 
 
 
-
-
-
-
-
-{-}
-{-| Investigator list constructor. Generates random lists of values of size
-between 0 and 10 from a given investigator generator using the `rangeLengthList`
-generator constructor from elm-random-extra and the `list` shrinker constructor
-from elm-shrink. Ideal for local testing.
--}
-list : Investigator a -> Investigator (List a)
-list inv =
-  investigator
-    (Random.List.rangeLengthList 0 10 inv.generator)
-    (Shrink.list inv.shrinker)
-
-
-{-| Investigator array constructor. Generates random arrays of values of size
-between 0 and 10 from a given investigator generator using the `rangeLengthArray`
-generator constructor from elm-random-extra and the `array` shrinker constructor
-from elm-shrink. Ideal for local testing.
--}
-array : Investigator a -> Investigator (Array a)
-array inv =
-  investigator
-    (Random.Array.rangeLengthArray 0 10 inv.generator)
-    (Shrink.array inv.shrinker)
-
-
-{-| Investigator 2-tuple constructor. Generates random 2-tuples from a 2-tuple
-of investigator generators. Uses the `tuple` shrinker constructor from elm-shrink.
--}
 tuple : (Investigator a, Investigator b) -> Investigator (a, b)
 tuple (invA, invB) =
-  investigator
-    (Random.zip invA.generator invB.generator)
-    (Shrink.tuple (invA.shrinker, invB.shrinker))
+  invA
+    `andThen` \a -> invB
+    `andThen` \b -> constant (a, b)
 
-
-
-
-{-| Investigator 3-tuple constructor. Generates random 3-tuples from a 3-tuple
-of investigator generators. Uses the `tuple3` shrinker constrctor from elm-shrink.
--}
 tuple3 : (Investigator a, Investigator b, Investigator c) -> Investigator (a, b, c)
 tuple3 (invA, invB, invC) =
-  investigator
-    (Random.zip3 invA.generator invB.generator invC.generator)
-    (Shrink.tuple3 (invA.shrinker, invB.shrinker, invC.shrinker))
+  invA
+    `andThen` \a -> invB
+    `andThen` \b -> invC
+    `andThen` \c -> constant (a, b, c)
 
-{-| Investigator 4-tuple constructor. Generates random 4-tuples from a 4-tuple
-of investigator generators. Uses the `tuple4` shrinker constrctor from elm-shrink.
--}
+
 tuple4 : (Investigator a, Investigator b, Investigator c, Investigator d) -> Investigator (a, b, c, d)
 tuple4 (invA, invB, invC, invD) =
-  investigator
-    (Random.zip4 invA.generator invB.generator invC.generator invD.generator)
-    (Shrink.tuple4 (invA.shrinker, invB.shrinker, invC.shrinker, invD.shrinker))
+  invA
+    `andThen` \a -> invB
+    `andThen` \b -> invC
+    `andThen` \c -> invD
+    `andThen` \d -> constant (a, b, c, d)
 
 
-{-| Investigator 5-tuple constructor. Generates random 5-tuples from a 5-tuple
-of investigator generators. Uses the `tuple5` shrinker constrctor from elm-shrink.
--}
 tuple5 : (Investigator a, Investigator b, Investigator c, Investigator d, Investigator e) -> Investigator (a, b, c, d, e)
 tuple5 (invA, invB, invC, invD, invE) =
-  investigator
-    (Random.zip5 invA.generator invB.generator invC.generator invD.generator invE.generator)
-    (Shrink.tuple5 (invA.shrinker, invB.shrinker, invC.shrinker, invD.shrinker, invE.shrinker))
+  invA
+    `andThen` \a -> invB
+    `andThen` \b -> invC
+    `andThen` \c -> invD
+    `andThen` \d -> invE
+    `andThen` \e -> constant (a, b, c, d, e)
 
-
-{-| Investigator of functions. Takes an investigator for the return type
-and returns an investigator of functions. Uses the `func` generator from
-elm-random-extra and does not perform any shrinking.
--}
 func : Investigator b -> Investigator (a -> b)
-func invB =
-  investigator
-    (Random.Function.func invB.generator)
-    (Shrink.noShrink)
-
+func investigator =
+  map always investigator
 
 func2 : Investigator c -> Investigator (a -> b -> c)
-func2 invC =
-  investigator
-    (Random.Function.func2 invC.generator)
-    (Shrink.noShrink)
+func2 investigator =
+  map always (func investigator)
 
 func3 : Investigator d -> Investigator (a -> b -> c -> d)
-func3 invD =
-  investigator
-    (Random.Function.func3 invD.generator)
-    (Shrink.noShrink)
+func3 investigator =
+  map always (func2 investigator)
 
 func4 : Investigator e -> Investigator (a -> b -> c -> d -> e)
-func4 invE =
-  investigator
-    (Random.Function.func4 invE.generator)
-    (Shrink.noShrink)
+func4 investigator =
+  map always (func3 investigator)
 
 func5 : Investigator f -> Investigator (a -> b -> c -> d -> e -> f)
-func5 invF =
-  investigator
-    (Random.Function.func5 invF.generator)
-    (Shrink.noShrink)
-
-
-{-} Simple example
-
-
-type alias Vector =
-  { x : Float
-  , y : Float
-  , z : Float
-  }
-
-vector : Investigator Vector
-vector =
-  let
-      shrinker {x,y,z} =
-        Vector
-          `Shrink.map`    shrink float x
-          `Shrink.andMap` shrink float y
-          `Shrink.andMap` shrink float z
-
-      generator =
-        Vector
-          `Random.map`    random float
-          `Random.andMap` random float
-          `Random.andMap` random float
-  in
-      investigator generator shrinker
--}
--}
-
+func5 investigator =
+  map always (func4 investigator)
 
 -------------
 -- HELPERS --
