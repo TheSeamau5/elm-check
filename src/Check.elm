@@ -30,7 +30,7 @@ module Check
   , true
   , false
   ) where
-{-|
+{-| Property Based Testing module in Elm.
 
 # Make a claim
 @docs Claim, claim, forAll, claimTrue, claimFalse
